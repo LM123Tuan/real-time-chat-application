@@ -1,24 +1,36 @@
 package com.tuan.chatserver.document;
 
-import com.tuan.chatserver.entity.ChatBox;
-import com.tuan.chatserver.entity.User;
 import com.tuan.chatserver.enums.MessageStatus;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotBlank;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Field;
 
 import java.time.LocalDateTime;
 
+@Document(collection = "message")
 public class Message {
+    @Id
     private String id;
-    private User sender;
-    private ChatBox chatBox;
+    @Field("sender_id")
+    @NotNull(message = "Sender ID cannot be empty")
+    private Long senderId;
+    @Field("chatbox_id")
+    @NotNull(message = "ChatBox ID cannot be empty")
+    private Long chatBoxId;
+    @NotNull(message = "Timestamp cannot be empty")
     private LocalDateTime timestamp;
+    @Field("status")
+    @NotNull(message = "Status cannot be empty")
     private MessageStatus status;
+    @NotBlank(message = "Content cannot be empty")
     private String content;
 
     public Message() {}
-    public Message(String id, User sender, ChatBox chatBox, LocalDateTime timestamp, MessageStatus status, String content) {
-        this.id= id;
-        this.sender = sender;
-        this.chatBox = chatBox;
+    public Message(Long senderId, Long chatBoxId, LocalDateTime timestamp, MessageStatus status, String content) {
+        this.senderId = senderId;
+        this.chatBoxId = chatBoxId;
         this.timestamp = timestamp;
         this.status = status;
         this.content = content;
@@ -27,11 +39,11 @@ public class Message {
     public String getId() {
         return id;
     }
-    public User getSender() {
-        return sender;
+    public Long getSenderId() {
+        return senderId;
     }
-    public ChatBox getChatBox() {
-        return chatBox;
+    public Long getChatBoxId() {
+        return chatBoxId;
     }
     public LocalDateTime getTimestamp() {
         return timestamp;
@@ -43,11 +55,11 @@ public class Message {
         return content;
     }
 
-    public void setSender(User sender) {
-        this.sender = sender;
+    public void setSenderId(Long senderId) {
+        this.senderId = senderId;
     }
-    public void setChatBox(ChatBox chatBox) {
-        this.chatBox = chatBox;
+    public void setChatBoxId(Long chatBoxId) {
+        this.chatBoxId = chatBoxId;
     }
     public void setTimestamp(LocalDateTime timestamp) {
         this.timestamp = timestamp;

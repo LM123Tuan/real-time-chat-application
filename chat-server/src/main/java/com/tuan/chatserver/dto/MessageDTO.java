@@ -1,21 +1,19 @@
 package com.tuan.chatserver.dto;
 
-import com.tuan.chatserver.entity.ChatBox;
-import com.tuan.chatserver.entity.User;
 import com.tuan.chatserver.enums.MessageStatus;
 
 import java.time.LocalDateTime;
 
 public class MessageDTO {
     private String id;
-    private User sender;
-    private ChatBox chatBox;
+    private UserDTO sender;
+    private ChatBoxDTO chatBox;
     private LocalDateTime timestamp;
     private MessageStatus status;
     private String content;
 
     public MessageDTO() {}
-    public MessageDTO(String id, User sender, ChatBox chatBox, LocalDateTime timestamp, MessageStatus status, String content) {
+    public MessageDTO(String id, UserDTO sender, ChatBoxDTO chatBox, LocalDateTime timestamp, MessageStatus status, String content) {
         this.id= id;
         this.sender = sender;
         this.chatBox = chatBox;
@@ -27,10 +25,10 @@ public class MessageDTO {
     public String getId() {
         return id;
     }
-    public User getSender() {
+    public UserDTO getSender() {
         return sender;
     }
-    public ChatBox getChatBox() {
+    public ChatBoxDTO getChatBox() {
         return chatBox;
     }
     public LocalDateTime getTimestamp() {
@@ -43,10 +41,10 @@ public class MessageDTO {
         return content;
     }
 
-    public void setSender(User sender) {
+    public void setSender(UserDTO sender) {
         this.sender = sender;
     }
-    public void setChatBox(ChatBox chatBox) {
+    public void setChatBox(ChatBoxDTO chatBox) {
         this.chatBox = chatBox;
     }
     public void setTimestamp(LocalDateTime timestamp) {

@@ -1,20 +1,19 @@
 package com.tuan.chatserver.dto;
 
-import com.tuan.chatserver.entity.User;
 import com.tuan.chatserver.enums.ChatboxType;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
+import java.util.List;
 
 public class ChatBoxDTO {
-    private String id;
+    private Long id;
     private LocalDateTime createTime;
-    private ArrayList<User> users;
-    private User creator;
+    private List<UserDTO> users;
+    private UserDTO creator;
     private ChatboxType chatboxType;
 
     public ChatBoxDTO() {}
-    public ChatBoxDTO(String id, LocalDateTime createTime, ArrayList<User> users, User creator, ChatboxType chatboxType) {
+    public ChatBoxDTO(Long id, LocalDateTime createTime, List<UserDTO> users, UserDTO creator, ChatboxType chatboxType) {
         this.id = id;
         this.createTime = createTime;
         this.users = users;
@@ -22,16 +21,16 @@ public class ChatBoxDTO {
         this.chatboxType = chatboxType;
     }
 
-    public String getId(){
+    public Long getId(){
         return id;
     }
     public LocalDateTime getCreateTime(){
         return createTime;
     }
-    public ArrayList<User> getUsers(){
+    public List<UserDTO> getUsers(){
         return users;
     }
-    public User getCreator(){
+    public UserDTO getCreator(){
         return creator;
     }
     public ChatboxType getChatboxType(){
@@ -41,10 +40,10 @@ public class ChatBoxDTO {
     public void setCreateTime(LocalDateTime createTime){
         this.createTime = createTime;
     }
-    public void setUsers(ArrayList<User> users){
+    public void setUsers(List<UserDTO> users){
         this.users = users;
     }
-    public void setCreator(User creator){
+    public void setCreator(UserDTO creator){
         this.creator = creator;
     }
     public void setChatboxType(ChatboxType chatboxType){

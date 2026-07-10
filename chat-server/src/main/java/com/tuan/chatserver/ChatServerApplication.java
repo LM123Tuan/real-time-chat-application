@@ -12,11 +12,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * @author Tuan
  */
 
-@SpringBootApplication(
-        exclude = {
-                org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration.class
-        }
-)
+@SpringBootApplication
 public class ChatServerApplication {
     /**
      * Khởi động ứng dụng Spring Boot.

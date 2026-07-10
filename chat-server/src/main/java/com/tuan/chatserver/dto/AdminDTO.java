@@ -6,7 +6,7 @@ public class AdminDTO extends PersonDTO{
     public AdminDTO(){
         super();
     }
-    public AdminDTO(String id, String username, UserRole role, boolean isActive) {
+    public AdminDTO(Long id, String username, UserRole role, boolean isActive) {
         super(id, username, UserRole.ADMIN, isActive);
     }
 }

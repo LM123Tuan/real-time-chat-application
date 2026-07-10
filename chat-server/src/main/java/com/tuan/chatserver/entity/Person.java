@@ -1,24 +1,34 @@
 package com.tuan.chatserver.entity;
 
 import com.tuan.chatserver.enums.UserRole;
+import jakarta.persistence.*;
 
+@Entity
+@Inheritance(strategy = InheritanceType.JOINED)
+@Table(name = "person")
 public abstract class Person {
-    private String id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.SEQUENCE)
+    private Long id;
+    @Column(unique = true, nullable = false)
     private String username;
+    @Column(nullable = false)
     private String password;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private UserRole role;
+    @Column(nullable = false)
     private boolean isActive;
 
     public Person(){}
-    public Person(String id, String username, String password, UserRole role, boolean isActive) {
-        this.id = id;
+    public Person(String username, String password, UserRole role, boolean isActive) {
         this.username = username;
         this.password = password;
         this.role = role;
         this.isActive = isActive;
     }
 
-    public String getId() {
+    public Long getId() {
         return this.id;
     }
     public String getUsername() {

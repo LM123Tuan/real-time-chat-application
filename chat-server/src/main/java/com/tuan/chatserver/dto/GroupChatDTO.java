@@ -1,14 +1,13 @@
 package com.tuan.chatserver.dto;
 
-import com.tuan.chatserver.entity.User;
 import com.tuan.chatserver.enums.ChatboxType;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
+import java.util.List;
 
 public class GroupChatDTO extends ChatBoxDTO{
     public GroupChatDTO() {}
-    public GroupChatDTO(String id, LocalDateTime createTime, ArrayList<User> users, User creator) {
+    public GroupChatDTO(Long id, LocalDateTime createTime, List<UserDTO> users, UserDTO creator) {
         super(id, createTime, users, creator, ChatboxType.GROUP_CHAT);
     }
 }

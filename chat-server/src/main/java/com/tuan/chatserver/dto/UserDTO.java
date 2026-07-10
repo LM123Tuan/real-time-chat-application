@@ -10,7 +10,7 @@ public class UserDTO extends PersonDTO {
     public UserDTO() {
         super();
     }
-    public UserDTO(String id, String fullname, String username, String email, String phone, boolean isActive) {
+    public UserDTO(Long id, String fullname, String username, String email, String phone, boolean isActive) {
         super(id, username, UserRole.USER, isActive);
         this.fullname = fullname;
         this.phone = phone;
