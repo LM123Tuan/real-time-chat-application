@@ -2,6 +2,7 @@ package com.tuan.chatserver.service;
 
 import com.tuan.chatserver.dto.UserDTO;
 import com.tuan.chatserver.entity.User;
+import com.tuan.chatserver.mapper.UserMapper;
 import com.tuan.chatserver.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -45,15 +46,7 @@ public class UserService {
         Optional<User> user = userRepository.findByUsername(username);
         if(user.isPresent()){
             User actualUser = user.get();
-            if(bCryptPasswordEncoder.matches(password,actualUser.getPassword())){
-                if(actualUser.isActive()){
-                    return true;
-                }else{
-                    return false;
-                }
-            }else{
-                return false;
-            }
+            return bCryptPasswordEncoder.matches(password, actualUser.getPassword()) && actualUser.isActive();
         }else{
             return false;
         }
@@ -73,15 +66,7 @@ public class UserService {
         Optional<User> user = userRepository.findByEmail(email);
         if(user.isPresent()){
             User actualUser = user.get();
-            if(bCryptPasswordEncoder.matches(password,actualUser.getPassword())){
-                if(actualUser.isActive()){
-                    return true;
-                }else{
-                    return false;
-                }
-            }else{
-                return false;
-            }
+            return bCryptPasswordEncoder.matches(password, actualUser.getPassword()) && actualUser.isActive();
         }else{
             return false;
         }
@@ -128,14 +113,7 @@ public class UserService {
     public UserDTO getProfile(Long id){
         Optional<User> user = userRepository.findById(id);
         if(user.isPresent()){
-            User actualUser = user.get();
-            Long userId=actualUser.getId();
-            String userName=actualUser.getUsername();
-            boolean isActive=actualUser.isActive();
-            String fullname=actualUser.getFullname();
-            String email=actualUser.getEmail();
-            String phone=actualUser.getPhone();
-            UserDTO userProfile = new UserDTO(userId,userName,fullname,email,phone,isActive);
+            UserDTO userProfile = UserMapper.mapUserToUserDTO(user.get());
             return userProfile;
         }else{
             return null;
@@ -264,12 +242,7 @@ public class UserService {
         List<User> users= userRepository.findByUsernameContainingAndIsActiveTrue(keyword);
         List<UserDTO> userDTOs=new ArrayList<>();
         for(User user:users){
-            Long id=user.getId();
-            String username=user.getUsername();
-            String fullname=user.getFullname();
-            String email=user.getEmail();
-            String phone=user.getPhone();
-            UserDTO userDTO=new UserDTO(id, fullname, username, email, phone, true);
+            UserDTO userDTO=UserMapper.mapUserToUserDTO(user);
             userDTOs.add(userDTO);
         }
         return userDTOs;

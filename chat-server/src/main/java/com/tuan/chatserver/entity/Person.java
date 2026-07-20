@@ -3,6 +3,8 @@ package com.tuan.chatserver.entity;
 import com.tuan.chatserver.enums.UserRole;
 import jakarta.persistence.*;
 
+import java.util.Objects;
+
 @Entity
 @Inheritance(strategy = InheritanceType.JOINED)
 @Table(name = "person")
@@ -55,5 +57,18 @@ public abstract class Person {
     }
     public void setActive(boolean isActive) {
         this.isActive = isActive;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Person person = (Person) o;
+        return Objects.equals(id, person.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(id);
     }
 }

@@ -8,8 +8,8 @@ import java.util.List;
 public class GroupChatDTO extends ChatBoxDTO{
     private String name;
     public GroupChatDTO() {}
-    public GroupChatDTO(Long id, LocalDateTime createTime, List<UserDTO> users, UserDTO creator, String name) {
-        super(id, createTime, users, creator, ChatboxType.GROUP_CHAT);
+    public GroupChatDTO(Long id, LocalDateTime createTime, List<UserDTO> users, UserDTO creator, String name, LocalDateTime lastActiveTime) {
+        super(id, createTime, users, creator, ChatboxType.GROUP_CHAT, lastActiveTime);
         this.name = name;
     }
 

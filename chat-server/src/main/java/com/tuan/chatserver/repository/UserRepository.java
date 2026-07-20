@@ -15,4 +15,5 @@ public interface UserRepository extends JpaRepository<User, Long> {
     List<User> findByUsernameContainingAndIsActiveTrue(String username);
     boolean existsByUsername(String username);
     boolean existsByEmail(String email);
+    long countByIsActive(Boolean isActive);
 }

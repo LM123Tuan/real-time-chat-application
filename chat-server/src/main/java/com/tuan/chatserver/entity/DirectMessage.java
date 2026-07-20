@@ -5,12 +5,13 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Entity
 @Table(name = "direct_message")
 public class DirectMessage extends ChatBox{
     public DirectMessage() {}
-    public DirectMessage(LocalDateTime createTime, User creator) {
-        super(createTime, creator, ChatboxType.DIRECT_MESSAGE);
+    public DirectMessage(LocalDateTime createTime, List<User> users, User creator, LocalDateTime lastActiveTime) {
+        super(createTime, users, creator, ChatboxType.DIRECT_MESSAGE, lastActiveTime);
     }
 }

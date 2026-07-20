@@ -7,7 +7,7 @@ import java.util.List;
 
 public class DirectMessageDTO extends ChatBoxDTO{
     public DirectMessageDTO() {}
-    public DirectMessageDTO(Long id, LocalDateTime createTime, List<UserDTO> users, UserDTO creator) {
-        super(id, createTime, users, creator, ChatboxType.DIRECT_MESSAGE);
+    public DirectMessageDTO(Long id, LocalDateTime createTime, List<UserDTO> users, UserDTO creator, LocalDateTime lastActiveTime) {
+        super(id, createTime, users, creator, ChatboxType.DIRECT_MESSAGE, lastActiveTime);
     }
 }

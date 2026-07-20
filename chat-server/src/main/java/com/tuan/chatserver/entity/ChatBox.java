@@ -29,13 +29,16 @@ public abstract class ChatBox {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ChatboxType chatboxType;
+    @Column(nullable = false)
+    private LocalDateTime lastActiveTime;
 
     public ChatBox() {}
-    public ChatBox(LocalDateTime createTime, User creator, ChatboxType chatboxType) {
+    public ChatBox(LocalDateTime createTime, List<User> users, User creator, ChatboxType chatboxType, LocalDateTime lastActiveTime) {
         this.createTime = createTime;
-        this.users = new ArrayList<>();
+        this.users = users;
         this.creator = creator;
         this.chatboxType = chatboxType;
+        this.lastActiveTime = lastActiveTime;
     }
 
     public Long getId(){
@@ -53,6 +56,9 @@ public abstract class ChatBox {
     public ChatboxType getChatboxType(){
         return chatboxType;
     }
+    public LocalDateTime getLastActiveTime(){
+        return lastActiveTime;
+    }
 
     public void setCreateTime(LocalDateTime createTime){
         this.createTime = createTime;
@@ -65,5 +71,8 @@ public abstract class ChatBox {
     }
     public void setChatboxType(ChatboxType chatboxType){
         this.chatboxType = chatboxType;
+    }
+    public void setLastActiveTime(LocalDateTime lastActiveTime){
+        this.lastActiveTime = lastActiveTime;
     }
 }

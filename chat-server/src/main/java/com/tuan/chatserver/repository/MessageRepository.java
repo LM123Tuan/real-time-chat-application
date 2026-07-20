@@ -9,8 +9,9 @@ import java.util.List;
 
 @Repository
 public interface MessageRepository extends MongoRepository<Message, String>{
-    List<Message> findByChatBoxIdOrderByTimestampAsc(Long chatBoxId);
-    List<Message> findBySenderIdAndChatBoxIdOrderByTimestampAsc(Long senderId, Long chatBoxId);
-    List<Message> findByChatBoxIdAndTimestampBetweenOrderByTimestampAsc(Long chatBoxId, LocalDateTime startTime, LocalDateTime endTime);
-    List<Message> findBySenderIdAndChatBoxIdAndTimestampBetweenOrderByTimestampAsc(Long senderId, Long chatBoxId, LocalDateTime startTime, LocalDateTime endTime);
+    List<Message> findByChatBoxIdOrderByTimestampDesc(Long chatBoxId);
+    List<Message> findBySenderIdAndChatBoxIdOrderByTimestampDesc(Long senderId, Long chatBoxId);
+    List<Message> findByChatBoxIdAndTimestampBetweenOrderByTimestampDesc(Long chatBoxId, LocalDateTime startTime, LocalDateTime endTime);
+    List<Message> findBySenderIdAndChatBoxIdAndTimestampBetweenOrderByTimestampDesc(Long senderId, Long chatBoxId, LocalDateTime startTime, LocalDateTime endTime);
+    Long countByTimestampBetween(LocalDateTime startTime, LocalDateTime endTime);
 }

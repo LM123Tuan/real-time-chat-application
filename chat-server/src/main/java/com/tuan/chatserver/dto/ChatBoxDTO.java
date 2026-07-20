@@ -11,14 +11,16 @@ public class ChatBoxDTO {
     private List<UserDTO> users;
     private UserDTO creator;
     private ChatboxType chatboxType;
+    private LocalDateTime lastActiveTime;
 
     public ChatBoxDTO() {}
-    public ChatBoxDTO(Long id, LocalDateTime createTime, List<UserDTO> users, UserDTO creator, ChatboxType chatboxType) {
+    public ChatBoxDTO(Long id, LocalDateTime createTime, List<UserDTO> users, UserDTO creator, ChatboxType chatboxType, LocalDateTime lastActiveTime) {
         this.id = id;
         this.createTime = createTime;
         this.users = users;
         this.creator = creator;
         this.chatboxType = chatboxType;
+        this.lastActiveTime = lastActiveTime;
     }
 
     public Long getId(){
@@ -36,6 +38,9 @@ public class ChatBoxDTO {
     public ChatboxType getChatboxType(){
         return chatboxType;
     }
+    public LocalDateTime getLastActiveTime(){
+        return lastActiveTime;
+    }
 
     public void setCreateTime(LocalDateTime createTime){
         this.createTime = createTime;
@@ -48,5 +53,8 @@ public class ChatBoxDTO {
     }
     public void setChatboxType(ChatboxType chatboxType){
         this.chatboxType = chatboxType;
+    }
+    public void setLastActiveTime(LocalDateTime lastActiveTime){
+        this.lastActiveTime = lastActiveTime;
     }
 }
