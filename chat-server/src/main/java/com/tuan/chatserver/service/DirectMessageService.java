@@ -10,9 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 @Service
 public class DirectMessageService {
@@ -32,10 +30,10 @@ public class DirectMessageService {
             if(!directMessageRepository.existsBetweenTwoUsers(creatorId,receiverId)){
                 User actualCreator = creator.get();
                 User actualReceiver = receiver.get();
-                List<User> users=new ArrayList<>();
+                Set<User> users=new HashSet<>();
                 users.add(actualCreator);
                 users.add(actualReceiver);
-                DirectMessage directMessage=new DirectMessage(LocalDateTime.now(), users, actualCreator, true, LocalDateTime.now());
+                DirectMessage directMessage=new DirectMessage(LocalDateTime.now(), users, true, LocalDateTime.now());
                 try{
                     directMessageRepository.save(directMessage);
                     return true;

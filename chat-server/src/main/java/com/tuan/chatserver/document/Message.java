@@ -21,6 +21,9 @@ public class Message {
     private Long chatBoxId;
     @NotNull(message = "Timestamp cannot be empty")
     private LocalDateTime timestamp;
+    @Field("viewable")
+    @NotNull(message = "Viewable cannot be empty")
+    private boolean viewable;
     @Field("status")
     @NotNull(message = "Status cannot be empty")
     private MessageStatus status;
@@ -28,10 +31,11 @@ public class Message {
     private String content;
 
     public Message() {}
-    public Message(Long senderId, Long chatBoxId, LocalDateTime timestamp, MessageStatus status, String content) {
+    public Message(Long senderId, Long chatBoxId, LocalDateTime timestamp, boolean viewable, MessageStatus status, String content) {
         this.senderId = senderId;
         this.chatBoxId = chatBoxId;
         this.timestamp = timestamp;
+        this.viewable = viewable;
         this.status = status;
         this.content = content;
     }
@@ -48,6 +52,9 @@ public class Message {
     public LocalDateTime getTimestamp() {
         return timestamp;
     }
+    public boolean isViewable() {
+        return viewable;
+    }
     public MessageStatus getStatus() {
         return status;
     }
@@ -63,6 +70,9 @@ public class Message {
     }
     public void setTimestamp(LocalDateTime timestamp) {
         this.timestamp = timestamp;
+    }
+    public void setViewable(boolean viewable) {
+        this.viewable = viewable;
     }
     public void setStatus(MessageStatus status) {
         this.status = status;

@@ -44,8 +44,9 @@ public class MessageMapper {
             return null;
         }
         LocalDateTime timestamp=message.getTimestamp();
+        boolean viewable=message.isViewable();
         MessageStatus status=message.getStatus();
         String content=message.getContent();
-        return new MessageDTO(id, senderDTO, chatBoxDTO, timestamp, status, content);
+        return new MessageDTO(id, senderDTO, chatBoxDTO, timestamp, viewable, status, content);
     }
 }

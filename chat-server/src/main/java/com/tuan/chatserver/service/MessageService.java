@@ -85,7 +85,7 @@ public class MessageService {
             if(!content.isEmpty()){
                 chatBox.setLastActiveTime(LocalDateTime.now());
                 chatBoxRepository.save(chatBox);
-                Message message=new Message(senderId, chatBoxId, LocalDateTime.now(), MessageStatus.SENT, content);
+                Message message=new Message(senderId, chatBoxId, LocalDateTime.now(), true, MessageStatus.SENT, content);
                 messageRepository.save(message);
                 return true;
             }else{
@@ -114,6 +114,28 @@ public class MessageService {
                 return true;
             }catch(Exception e){
                 e.printStackTrace();
+                return false;
+            }
+        }else{
+            return false;
+        }
+    }
+
+    public boolean recallMessage(String messageId){
+        Optional<Message> message=messageRepository.findById(messageId);
+        if(message.isPresent()){
+            Message actualMessage=message.get();
+            boolean messageViewable=actualMessage.isViewable();
+            if(messageViewable){
+                actualMessage.setViewable(false);
+                try{
+                    messageRepository.save(actualMessage);
+                    return true;
+                }catch(Exception e){
+                    e.printStackTrace();
+                    return false;
+                }
+            }else{
                 return false;
             }
         }else{
