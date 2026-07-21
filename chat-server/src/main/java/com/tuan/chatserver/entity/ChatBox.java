@@ -4,8 +4,7 @@ import com.tuan.chatserver.enums.ChatboxType;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Set;
 
 @Entity
 @Table(name = "chatbox")
@@ -22,22 +21,21 @@ public abstract class ChatBox {
             joinColumns = @JoinColumn(name = "chatbox_id"),
             inverseJoinColumns = @JoinColumn(name = "user_id")
     )
-    private List<User> users;
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "creator_id", nullable = false)
-    private User creator;
+    private Set<User> users;
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ChatboxType chatboxType;
     @Column(nullable = false)
+    private boolean isActive;
+    @Column(nullable = false)
     private LocalDateTime lastActiveTime;
 
     public ChatBox() {}
-    public ChatBox(LocalDateTime createTime, List<User> users, User creator, ChatboxType chatboxType, LocalDateTime lastActiveTime) {
+    public ChatBox(LocalDateTime createTime, Set<User> users, ChatboxType chatboxType, boolean isActive, LocalDateTime lastActiveTime) {
         this.createTime = createTime;
         this.users = users;
-        this.creator = creator;
         this.chatboxType = chatboxType;
+        this.isActive = isActive;
         this.lastActiveTime = lastActiveTime;
     }
 
@@ -47,14 +45,14 @@ public abstract class ChatBox {
     public LocalDateTime getCreateTime(){
         return createTime;
     }
-    public List<User> getUsers(){
+    public Set<User> getUsers(){
         return users;
-    }
-    public User getCreator(){
-        return creator;
     }
     public ChatboxType getChatboxType(){
         return chatboxType;
+    }
+    public boolean isActive(){
+        return isActive;
     }
     public LocalDateTime getLastActiveTime(){
         return lastActiveTime;
@@ -63,14 +61,14 @@ public abstract class ChatBox {
     public void setCreateTime(LocalDateTime createTime){
         this.createTime = createTime;
     }
-    public void setUsers(List<User> users){
+    public void setUsers(Set<User> users){
         this.users = users;
-    }
-    public void setCreator(User creator){
-        this.creator = creator;
     }
     public void setChatboxType(ChatboxType chatboxType){
         this.chatboxType = chatboxType;
+    }
+    public void setActive(boolean isActive){
+        this.isActive = isActive;
     }
     public void setLastActiveTime(LocalDateTime lastActiveTime){
         this.lastActiveTime = lastActiveTime;

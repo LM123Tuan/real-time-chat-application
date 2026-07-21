@@ -35,7 +35,7 @@ public class DirectMessageService {
                 List<User> users=new ArrayList<>();
                 users.add(actualCreator);
                 users.add(actualReceiver);
-                DirectMessage directMessage=new DirectMessage(LocalDateTime.now(), users, actualCreator, LocalDateTime.now());
+                DirectMessage directMessage=new DirectMessage(LocalDateTime.now(), users, actualCreator, true, LocalDateTime.now());
                 try{
                     directMessageRepository.save(directMessage);
                     return true;
@@ -51,7 +51,7 @@ public class DirectMessageService {
         }
     }
 
-    public DirectMessageDTO getChatBetweenTwoUsers(Long userId1,Long userId2){
+    public DirectMessageDTO getChatBetweenTwoUsersByUsersId(Long userId1,Long userId2){
         Optional<DirectMessage> directMessage = directMessageRepository.findBetweenTwoUsers(userId1,userId2);
         if(directMessage.isPresent()){
             return DirectMessageMapper.mapDirectMessageToDirectMessageDTO(directMessage.get());

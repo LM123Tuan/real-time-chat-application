@@ -20,7 +20,7 @@ public class ChatBoxService {
     }
 
     public List<ChatBoxDTO> getAllChatboxForUser(Long userId) {
-        List<ChatBox> chatBoxes= chatBoxRepository.findByUsers_IdOrderByLastActiveTimeDesc(userId);
+        List<ChatBox> chatBoxes= chatBoxRepository.findByUsers_IdAndIsActiveTrueOrderByLastActiveTimeDesc(userId);
         List<ChatBoxDTO> chatBoxDTOS=new ArrayList<>();
         for(ChatBox chatBox:chatBoxes){
             ChatBoxDTO chatBoxDTO= ChatBoxMapper.mapChatBoxToChatBoxDTO(chatBox);

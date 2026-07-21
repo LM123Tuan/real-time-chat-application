@@ -3,11 +3,11 @@ package com.tuan.chatserver.dto;
 import com.tuan.chatserver.enums.ChatboxType;
 
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.Set;
 
 public class DirectMessageDTO extends ChatBoxDTO{
     public DirectMessageDTO() {}
-    public DirectMessageDTO(Long id, LocalDateTime createTime, List<UserDTO> users, UserDTO creator, LocalDateTime lastActiveTime) {
-        super(id, createTime, users, creator, ChatboxType.DIRECT_MESSAGE, lastActiveTime);
+    public DirectMessageDTO(Long id, LocalDateTime createTime, Set<UserDTO> users, boolean isActive, LocalDateTime lastActiveTime) {
+        super(id, createTime, users, ChatboxType.DIRECT_MESSAGE, isActive, lastActiveTime);
     }
 }

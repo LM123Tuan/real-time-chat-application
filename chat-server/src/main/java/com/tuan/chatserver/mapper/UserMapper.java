@@ -11,7 +11,7 @@ public class UserMapper {
         String fullname=user.getFullname();
         String email=user.getEmail();
         String phone=user.getPhone();
-        UserDTO userDTO=new UserDTO(id,userName,fullname,email,phone,isActive);
+        UserDTO userDTO = new UserDTO(id, fullname, userName, email, phone, isActive);
         return userDTO;
     }
 }

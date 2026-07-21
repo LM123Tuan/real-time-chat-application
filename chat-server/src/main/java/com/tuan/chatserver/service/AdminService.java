@@ -129,6 +129,16 @@ public class AdminService {
         return chatBoxDTOS;
     }
 
+    public List<ChatBoxDTO> getAllUserChatBox(Long userId){
+        List<ChatBox> chatBoxes=chatBoxRepository.findByUsers_IdOrderByLastActiveTimeDesc(userId);
+        List<ChatBoxDTO> chatBoxDTOS=new ArrayList<>();
+        for(ChatBox chatBox:chatBoxes){
+            ChatBoxDTO chatBoxDTO= ChatBoxMapper.mapChatBoxToChatBoxDTO(chatBox);
+            chatBoxDTOS.add(chatBoxDTO);
+        }
+        return chatBoxDTOS;
+    }
+
     //STATISTICS
 
     public Long countUsers(){

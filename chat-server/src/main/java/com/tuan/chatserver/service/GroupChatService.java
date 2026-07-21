@@ -38,7 +38,7 @@ public class GroupChatService {
             }
             sb.delete(0,1);
             String name=sb.toString();
-            GroupChat groupChat=new GroupChat(LocalDateTime.now(), users, creator, name, LocalDateTime.now());
+            GroupChat groupChat=new GroupChat(LocalDateTime.now(), users, creator, name, true, LocalDateTime.now());
             try{
                 groupChatRepository.save(groupChat);
                 return true;
