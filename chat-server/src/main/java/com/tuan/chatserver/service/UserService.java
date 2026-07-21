@@ -13,19 +13,27 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Service layer xử lý nghiệp vụ liên quan tới {@link User}: đăng ký, đăng nhập,
- * quản lý thông tin cá nhân và tìm kiếm người dùng.
+ * Service xử lý nghiệp vụ liên quan đến {@link User} (người dùng hệ thống).
+ * <p>
+ * Bao gồm các chức năng: đăng ký tài khoản, đăng nhập, quản lý hồ sơ cá nhân
+ * (cập nhật thông tin, đổi mật khẩu, xóa tài khoản), và tìm kiếm người dùng.
  * <p>
  * Toàn bộ mật khẩu được mã hóa bằng {@link BCryptPasswordEncoder} trước khi lưu
- * xuống database. Các thao tác thay đổi dữ liệu trên tài khoản (đổi mật khẩu,
- * cập nhật hồ sơ, xóa tài khoản) đều dựa trên {@code id} làm định danh chính,
- * vì {@code username}/{@code email} có thể thay đổi theo thời gian.
+ * xuống database. Các thao tác thay đổi dữ liệu trên tài khoản đều dựa trên
+ * {@code id} làm định danh chính, vì {@code username} và {@code email} có thể
+ * thay đổi theo thời gian.
  */
 @Service
 public class UserService {
     private final UserRepository userRepository;
     private final BCryptPasswordEncoder bCryptPasswordEncoder;
 
+    /**
+     * Khởi tạo {@code UserService} thông qua Constructor Injection.
+     *
+     * @param userRepository         repository dùng để thao tác dữ liệu {@link User}
+     * @param bCryptPasswordEncoder  encoder dùng để mã hóa và xác thực mật khẩu
+     */
     @Autowired
     public UserService(UserRepository userRepository, BCryptPasswordEncoder bCryptPasswordEncoder) {
         this.userRepository = userRepository;
@@ -40,7 +48,8 @@ public class UserService {
      *
      * @param username username của tài khoản
      * @param password mật khẩu dạng plain text do người dùng nhập
-     * @return {@code true} nếu đăng nhập thành công, ngược lại {@code false}
+     * @return {@code true} nếu đăng nhập thành công; {@code false} nếu username
+     *         không tồn tại, mật khẩu không khớp, hoặc tài khoản bị vô hiệu hóa
      */
     public boolean loginByUsername(String username, String password){
         Optional<User> user = userRepository.findByUsername(username);
@@ -60,7 +69,8 @@ public class UserService {
      *
      * @param email email của tài khoản
      * @param password mật khẩu dạng plain text do người dùng nhập
-     * @return {@code true} nếu đăng nhập thành công, ngược lại {@code false}
+     * @return {@code true} nếu đăng nhập thành công; {@code false} nếu email
+     *         không tồn tại, mật khẩu không khớp, hoặc tài khoản bị vô hiệu hóa
      */
     public boolean loginByEmail(String email, String password){
         Optional<User> user = userRepository.findByEmail(email);
@@ -75,16 +85,16 @@ public class UserService {
     /**
      * Đăng ký tài khoản người dùng mới.
      * <p>
-     * Đăng ký thất bại nếu {@code username} hoặc {@code email} đã tồn tại.
-     * Mật khẩu được mã hóa trước khi lưu. Tài khoản mới mặc định ở trạng thái
-     * {@code isActive = true}.
+     * Đăng ký thất bại nếu {@code username} hoặc {@code email} đã tồn tại trong hệ thống.
+     * Mật khẩu được mã hóa bằng BCrypt trước khi lưu vào database. Tài khoản mới
+     * mặc định ở trạng thái hoạt động ({@code isActive = true}).
      *
-     * @param fullname họ tên đầy đủ
-     * @param username username duy nhất, dùng để đăng nhập
-     * @param email email duy nhất, dùng để đăng nhập
-     * @param password mật khẩu dạng plain text, sẽ được mã hóa trước khi lưu
-     * @param phone số điện thoại
-     * @return {@code true} nếu đăng ký thành công, {@code false} nếu username/email
+     * @param fullname   họ tên đầy đủ
+     * @param username   username duy nhất, dùng để đăng nhập
+     * @param email      email duy nhất, dùng để đăng nhập
+     * @param password   mật khẩu dạng plain text, sẽ được mã hóa trước khi lưu
+     * @param phone      số điện thoại liên hệ
+     * @return {@code true} nếu đăng ký thành công; {@code false} nếu username/email
      *         đã tồn tại hoặc xảy ra lỗi khi lưu dữ liệu
      */
     public boolean register(String fullname, String username, String email, String password, String phone){
@@ -104,11 +114,14 @@ public class UserService {
     }
 
     /**
-     * Lấy thông tin hồ sơ (profile) của một người dùng theo {@code id}.
+     * Lấy thông tin hồ sơ (profile) công khai của một người dùng theo {@code id}.
+     * <p>
+     * Phương thức trả về {@link UserDTO} chứa các thông tin cơ bản có thể chia sẻ
+     * công khai (không bao gồm mật khẩu).
      *
      * @param id id của người dùng cần lấy thông tin
-     * @return {@link UserDTO} chứa thông tin công khai của người dùng
-     *         (không bao gồm mật khẩu), hoặc {@code null} nếu không tìm thấy
+     * @return {@link UserDTO} chứa thông tin hồ sơ; hoặc {@code null} nếu
+     *         không tìm thấy người dùng với id tương ứng
      */
     public UserDTO getProfile(Long id){
         Optional<User> user = userRepository.findById(id);
@@ -123,13 +136,15 @@ public class UserService {
     /**
      * Đổi mật khẩu cho một tài khoản đang hoạt động.
      * <p>
-     * Yêu cầu xác thực đúng mật khẩu cũ trước khi cho phép đổi. Thất bại nếu
-     * tài khoản không tồn tại, đã bị vô hiệu hóa, hoặc mật khẩu cũ không khớp.
+     * Yêu cầu xác thực đúng mật khẩu cũ trước khi cho phép đổi sang mật khẩu mới.
+     * Mật khẩu mới sẽ được mã hóa bằng BCrypt trước khi lưu. Thất bại nếu tài khoản
+     * không tồn tại, đã bị vô hiệu hóa, hoặc mật khẩu cũ không khớp.
      *
-     * @param id id của người dùng
-     * @param oldPassword mật khẩu hiện tại, dùng để xác thực
-     * @param newPassword mật khẩu mới, sẽ được mã hóa trước khi lưu
-     * @return {@code true} nếu đổi mật khẩu thành công, ngược lại {@code false}
+     * @param id           id của người dùng cần đổi mật khẩu
+     * @param oldPassword  mật khẩu hiện tại (dạng plain text), dùng để xác thực
+     * @param newPassword  mật khẩu mới (dạng plain text), sẽ được mã hóa trước khi lưu
+     * @return {@code true} nếu đổi mật khẩu thành công; {@code false} nếu tài khoản
+     *         không tồn tại, bị vô hiệu hóa, mật khẩu cũ không khớp, hoặc xảy ra lỗi khi lưu
      */
     public boolean changePassword(Long id, String oldPassword, String newPassword){
         Optional<User> user = userRepository.findById(id);
@@ -158,20 +173,20 @@ public class UserService {
     }
 
     /**
-     * Cập nhật thông tin hồ sơ của một tài khoản đang hoạt động, bao gồm
-     * cho phép đổi {@code username} và {@code email}.
+     * Cập nhật thông tin hồ sơ của một tài khoản đang hoạt động.
      * <p>
-     * Nếu {@code username} hoặc {@code email} mới khác giá trị hiện tại,
-     * sẽ kiểm tra trùng lặp với các tài khoản khác trước khi cập nhật.
-     * Thất bại nếu tài khoản không tồn tại, đã bị vô hiệu hóa, hoặc
-     * username/email mới đã được người khác sử dụng.
+     * Cho phép cập nhật: họ tên, username, email, và số điện thoại. Nếu username
+     * hoặc email mới khác giá trị hiện tại, sẽ kiểm tra trùng lặp với các tài khoản
+     * khác trước khi cập nhật. Thất bại nếu tài khoản không tồn tại, đã bị vô hiệu hóa,
+     * hoặc username/email mới đã được người khác sử dụng.
      *
-     * @param id id của người dùng cần cập nhật
+     * @param id       id của người dùng cần cập nhật
      * @param fullname họ tên đầy đủ mới
      * @param username username mới (có thể giữ nguyên username hiện tại)
-     * @param email email mới (có thể giữ nguyên email hiện tại)
-     * @param phone số điện thoại mới
-     * @return {@code true} nếu cập nhật thành công, ngược lại {@code false}
+     * @param email    email mới (có thể giữ nguyên email hiện tại)
+     * @param phone    số điện thoại mới
+     * @return {@code true} nếu cập nhật thành công; {@code false} nếu tài khoản
+     *         không tồn tại, bị vô hiệu hóa, username/email mới bị trùng, hoặc xảy ra lỗi khi lưu
      */
     public boolean updateProfile(Long id, String fullname, String username, String email, String phone){
         Optional<User> user = userRepository.findById(id);
@@ -206,11 +221,13 @@ public class UserService {
     /**
      * Vô hiệu hóa tài khoản (soft delete) bằng cách đặt {@code isActive = false}.
      * <p>
-     * Dữ liệu tài khoản không bị xóa khỏi database, chỉ chuyển trạng thái,
-     * nhằm giữ lại lịch sử liên quan (tin nhắn, nhóm chat, ...).
+     * Dữ liệu tài khoản không bị xóa khỏi database, chỉ chuyển trạng thái thành
+     * không hoạt động, nhằm giữ lại lịch sử liên quan (tin nhắn, nhóm chat, ...).
+     * Người dùng sẽ không thể đăng nhập lại sau khi tài khoản bị vô hiệu hóa.
      *
      * @param id id của người dùng cần vô hiệu hóa
-     * @return {@code true} nếu thao tác thành công, ngược lại {@code false}
+     * @return {@code true} nếu vô hiệu hóa thành công; {@code false} nếu
+     *         tài khoản không tồn tại hoặc xảy ra lỗi khi lưu
      */
     public boolean deleteAccount(Long id){
         Optional<User> user = userRepository.findById(id);
@@ -230,13 +247,14 @@ public class UserService {
     }
 
     /**
-     * Tìm danh sách người dùng đang hoạt động có username chứa từ khóa.
+     * Tìm danh sách người dùng đang hoạt động có username chứa từ khóa tìm kiếm.
      * <p>
      * Chỉ trả về các tài khoản có {@code isActive = true}; tài khoản đã bị
-     * vô hiệu hóa sẽ không xuất hiện trong kết quả.
+     * vô hiệu hóa sẽ không xuất hiện trong kết quả tìm kiếm.
      *
-     * @param keyword từ khóa tìm kiếm trong username
-     * @return danh sách {@link UserDTO} của các người dùng đang hoạt động khớp từ khóa
+     * @param keyword từ khóa tìm kiếm trong username (tìm kiếm LIKE, phân biệt hoa/thường)
+     * @return danh sách {@link UserDTO} của các người dùng đang hoạt động khớp từ khóa;
+     *         trả về danh sách rỗng nếu không có kết quả nào phù hợp
      */
     public List<UserDTO> getActiveUserList(String keyword){
         List<User> users= userRepository.findByUsernameContainingAndIsActiveTrue(keyword);

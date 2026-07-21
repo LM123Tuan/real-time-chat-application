@@ -12,14 +12,23 @@ import java.util.Optional;
 @Repository
 public interface GroupChatRepository extends JpaRepository<GroupChat,Long> {
     @Query("SELECT DISTINCT gc FROM GroupChat gc "+
-            "JOIN gc.users filterUser "+
+            " JOIN gc.users filterUser "+
             " JOIN FETCH gc.users"+
-            " JOIN FETCH gc.creator "+
-            " WHERE filterUser.id = :userId AND gc.name LIKE CONCAT('%', :name, '%') ORDER BY gc.lastActiveTime DESC")
-    List<GroupChat> findByNameContainingAndUsers_IdOrderByLastActiveTimeDesc(@Param("name") String name,@Param("userId") Long userId);
+            " JOIN FETCH gc.leaders "+
+            " JOIN FETCH gc.viceLeaders "+
+            " WHERE filterUser.id = :userId AND gc.name LIKE CONCAT('%', :name, '%') AND gc.isActive = true ORDER BY gc.lastActiveTime DESC")
+    List<GroupChat> findByNameContainingAndUserIdAndIsActiveTrueOrderByLastActiveTimeDesc(@Param("name") String name,@Param("userId") Long userId);
     @Query("SELECT DISTINCT gc FROM GroupChat gc "+
             " JOIN FETCH gc.users "+
-            " JOIN FETCH gc.creator "+
+            " JOIN FETCH gc.leaders "+
+            " JOIN FETCH gc.viceLeaders "+
             " WHERE gc.id = :id ")
     Optional<GroupChat> findById(@Param("id") Long id);
+    @Query("SELECT DISTINCT gc FROM GroupChat gc "+
+            " JOIN gc.users filterUser "+
+            " JOIN FETCH gc.users"+
+            " JOIN FETCH gc.leaders "+
+            " JOIN FETCH gc.viceLeaders "+
+            " WHERE filterUser.id = :userId AND gc.isActive = true")
+    List<GroupChat> findByUserIdAndIsActiveTrue(@Param("userId") Long userId);
 }

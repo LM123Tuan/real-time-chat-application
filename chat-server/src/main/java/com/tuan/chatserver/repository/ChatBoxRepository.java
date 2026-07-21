@@ -16,18 +16,16 @@ public interface ChatBoxRepository extends JpaRepository<ChatBox,Long> {
     @Query("SELECT DISTINCT cb FROM ChatBox cb " +
             "JOIN cb.users filterUser "+
             "JOIN FETCH cb.users " +
-            "JOIN FETCH cb.creator " +
             "WHERE filterUser.id = :userId ORDER BY cb.lastActiveTime DESC")
-    List<ChatBox> findByUsers_IdOrderByLastActiveTimeDesc(@Param("userId") Long userId);
+    List<ChatBox> findByUserIdOrderByLastActiveTimeDesc(@Param("userId") Long userId);
     @Query("SELECT DISTINCT cb FROM ChatBox cb " +
             "JOIN cb.users filterUser "+
             "JOIN FETCH cb.users " +
-            "JOIN FETCH cb.creator " +
             "WHERE filterUser.id = :userId AND cb.isActive = true ORDER BY cb.lastActiveTime DESC")
-    List<ChatBox> findByUsers_IdAndIsActiveTrueOrderByLastActiveTimeDesc(@Param("userId") Long userId);
-    @EntityGraph(attributePaths = {"users", "creator"})
+    List<ChatBox> findByUserIdAndIsActiveTrueOrderByLastActiveTimeDesc(@Param("userId") Long userId);
+    @EntityGraph(attributePaths = {"users"})
     Optional<ChatBox> findById(Long id);
-    @EntityGraph(attributePaths = {"users", "creator"})
+    @EntityGraph(attributePaths = {"users"})
     List<ChatBox> findAll();
     Long countByLastActiveTimeBetween(LocalDateTime startTime, LocalDateTime endTime);
 }
