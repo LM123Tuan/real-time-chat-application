@@ -3,24 +3,36 @@ package com.tuan.chatserver.service;
 import com.tuan.chatserver.dto.GroupChatDTO;
 import com.tuan.chatserver.entity.GroupChat;
 import com.tuan.chatserver.entity.User;
+import com.tuan.chatserver.exception.*;
 import com.tuan.chatserver.mapper.GroupChatMapper;
 import com.tuan.chatserver.repository.GroupChatRepository;
 import com.tuan.chatserver.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
- * Service xử lý nghiệp vụ liên quan đến {@link GroupChat} (đoạn chat nhóm nhiều người dùng).
+ * Service xử lý nghiệp vụ liên quan đến {@link GroupChat} (nhóm chat).
  * <p>
- * Bao gồm các chức năng: tạo nhóm chat, đổi tên nhóm, thêm/xóa thành viên, rời nhóm,
- * truy vấn nhóm chat theo id hoặc theo tên, cùng các thao tác phân quyền
- * (thăng cấp/hạ cấp giữa leader, vice leader và thành viên thường).
+ * Cung cấp chức năng tạo, đổi tên, quản lý thành viên (thêm/xóa/rời nhóm), phân quyền
+ * leader và vice leader, cùng các chức năng truy vấn nhóm chat theo người dùng hoặc từ khóa.
+ * <p>
+ * <b>Quy tắc phân quyền:</b> một nhóm chat có thể có nhiều leader và vice leader.
+ * Các thao tác thăng cấp/hạ cấp và loại bỏ thành viên đều yêu cầu requester phải có
+ * vai trò phù hợp (leader hoặc vice leader) và không được tự áp dụng thao tác lên chính mình.
+ * <p>
+ * <b>Lưu ý về log:</b> các operation ghi/sửa dữ liệu được ghi log ở mức INFO/WARN/ERROR;
+ * các operation chỉ đọc dữ liệu (query) được ghi log ở mức DEBUG.
  */
 @Service
 public class GroupChatService {
+    private final Logger logger = LoggerFactory.getLogger(this.getClass());
+
     private final GroupChatRepository groupChatRepository;
     private final UserRepository userRepository;
 
@@ -37,167 +49,198 @@ public class GroupChatService {
     }
 
     /**
-     * Tạo một nhóm chat mới với người tạo là leader mặc định.
-     * <p>
-     * Nhóm chat hợp lệ phải có ít nhất 2 thành viên khác ngoài người tạo
-     * (tổng cộng ít nhất 3 người). Tên nhóm được tự động sinh ra bằng cách nối username
-     * của tất cả thành viên, cách nhau bởi dấu phẩy.
+     * Lấy entity {@link GroupChat} theo id, ném exception nếu không tìm thấy.
      *
-     * @param creator    người dùng tạo nhóm, sẽ tự động trở thành leader
-     * @param otherUsers tập hợp các thành viên khác được thêm vào nhóm (không tính creator)
-     * @return {@code true} nếu tạo và lưu nhóm chat thành công; {@code false} nếu
-     *         {@code otherUsers} là {@code null}, có ít hơn 2 thành viên, hoặc xảy ra lỗi khi lưu
+     * @param groupChatId id của nhóm chat cần lấy
+     * @return entity {@link GroupChat} tương ứng
+     * @throws ChatBoxNotFoundException nếu không tìm thấy nhóm chat với id tương ứng
      */
-    public boolean createGroupChat(User creator, Set<User> otherUsers){
-        if(otherUsers==null||otherUsers.size()<=1){
-            return false;
+    private GroupChat mapOptionalGroupChatToEntity(Long groupChatId){
+        GroupChat groupChat=groupChatRepository.findById(groupChatId).orElseThrow(() -> {
+            logger.warn("Add member to group chat failed: group chat not found, groupChatId={}", groupChatId);
+            throw new ChatBoxNotFoundException(groupChatId);
+        });
+        return groupChat;
+    }
+
+    /**
+     * Lấy entity {@link User} theo id, ném exception nếu không tìm thấy.
+     *
+     * @param userId id của người dùng cần lấy
+     * @return entity {@link User} tương ứng
+     * @throws UserNotFoundException nếu không tìm thấy người dùng với id tương ứng
+     */
+    private User mapOptionalUserToEntity(Long userId){
+        User user=userRepository.findById(userId).orElseThrow(() -> {
+            logger.warn("Add member to group chat failed: member not found, memberId={}", userId);
+            throw new UserNotFoundException(userId);
+        });
+        return user;
+    }
+
+    /**
+     * Tạo một nhóm chat mới (group chat) với người tạo và ít nhất 2 thành viên khác.
+     * <p>
+     * Người tạo ({@code creatorId}) sẽ tự động được thêm vào danh sách thành viên và
+     * được gán làm leader duy nhất của nhóm. Tên nhóm được sinh tự động bằng cách nối
+     * username của tất cả thành viên. {@code otherUserIds} phải chứa ít nhất 2 người dùng
+     * khác ngoài người tạo.
+     *
+     * @param creatorId    id của người dùng tạo nhóm chat (sẽ trở thành leader)
+     * @param otherUserIds tập id của các thành viên khác cần thêm vào nhóm (phải có ít nhất 2 phần tử)
+     * @throws NotEnoughMembersException nếu {@code otherUserIds} là null hoặc có ít hơn 2 phần tử
+     * @throws UserNotFoundException     nếu không tìm thấy creator hoặc một trong các thành viên khác
+     * @throws DataAccessFailureException nếu lỗi khi lưu vào database
+     */
+    public void createGroupChat(Long creatorId, Set<Long> otherUserIds){
+        logger.info("Attempting to create group chat, creatorId={}", creatorId);
+        if(otherUserIds==null||otherUserIds.size()<=1){
+            logger.warn("Create group chat failed: otherUsers is null or has less than 2 members");
+            throw new NotEnoughMembersException();
         }else{
-            Set<User> users=new HashSet<>();
-            users.add(creator);
-            users.addAll(otherUsers);
-            Set<User> leaders=new HashSet<>();
-            leaders.add(creator);
-            Set<User> viceLeaders=new HashSet<>();
-            StringBuilder sb=new StringBuilder();
-            for(User user:users){
-                sb.append(", "+user.getUsername());
+            Set<Long> userIds=new HashSet<>();
+            userIds.addAll(otherUserIds);
+            userIds.add(creatorId);
+            Set<User> users=userRepository.findByIdIn(userIds);
+            User leader = users.stream().filter(user -> user.getId().equals(creatorId)).findFirst().orElseThrow(() -> new UserNotFoundException(creatorId));
+            if(users.size()!=userIds.size()){
+                Set<Long> foundIds = users.stream().map(User::getId).collect(Collectors.toSet());
+                Set<Long> missingIds = new HashSet<>(otherUserIds);
+                missingIds.removeAll(foundIds);
+                throw new UserNotFoundException(missingIds);
             }
-            sb.delete(0,1);
-            String name=sb.toString();
+            Set<User> leaders=new HashSet<>();
+            leaders.add(leader);
+            Set<User> viceLeaders=new HashSet<>();
+            String name=users.stream().map(User::getUsername).collect(Collectors.joining(", "));
             GroupChat groupChat=new GroupChat(LocalDateTime.now(), users, leaders, viceLeaders, name, true, LocalDateTime.now());
             try{
                 groupChatRepository.save(groupChat);
-                return true;
+                logger.info("Group chat created successfully, id={}, name={}", groupChat.getId(), name);
             }catch (Exception e){
-                e.printStackTrace();
-                return false;
+                logger.error("Error occurred while creating group chat", e);
+                throw new DataAccessFailureException(e);
             }
         }
     }
 
     /**
-     * Đổi tên của một nhóm chat đã tồn tại.
+     * Đổi tên một nhóm chat.
      *
      * @param groupChatId id của nhóm chat cần đổi tên
-     * @param newName     tên mới cho nhóm chat
-     * @return {@code true} nếu đổi tên và lưu thành công; {@code false} nếu không tìm thấy
-     *         nhóm chat với id tương ứng hoặc xảy ra lỗi khi lưu
+     * @param newName     tên mới của nhóm chat
+     * @throws ChatBoxNotFoundException   nếu không tìm thấy nhóm chat với id tương ứng
+     * @throws DataAccessFailureException nếu lỗi khi lưu vào database
      */
-    public boolean renameGroupChat(Long groupChatId, String newName){
-        Optional<GroupChat> groupChat=groupChatRepository.findById(groupChatId);
-        if(groupChat.isPresent()){
-            GroupChat actualGroupChat=groupChat.get();
-            actualGroupChat.setName(newName);
-            try{
-                groupChatRepository.save(actualGroupChat);
-                return true;
-            }catch (Exception e){
-                e.printStackTrace();
-                return false;
-            }
-        }else{
-            return false;
+    public void renameGroupChat(Long groupChatId, String newName){
+        logger.info("Attempting to rename group chat, groupChatId={}", groupChatId);
+        GroupChat groupChat=mapOptionalGroupChatToEntity(groupChatId);
+        groupChat.setName(newName);
+        try{
+            groupChatRepository.save(groupChat);
+            logger.info("Group chat renamed successfully, groupChatId={}", groupChatId);
+        }catch (Exception e){
+            logger.error("Error occurred while renaming group chat, groupChatId={}", groupChatId, e);
+            throw new DataAccessFailureException(e);
         }
     }
 
     /**
      * Thêm một thành viên mới vào nhóm chat.
      * <p>
-     * Yêu cầu người thực hiện (requester) phải là thành viên hiện tại của nhóm.
-     * Thành viên được thêm vào không được đã có mặt trong nhóm.
+     * Chỉ những người dùng đang là thành viên của nhóm mới có quyền thêm người mới.
+     * Thành viên được thêm không được đã có mặt trong nhóm.
      *
-     * @param requesterId id của người dùng thực hiện yêu cầu thêm thành viên
+     * @param requesterId id của người dùng thực hiện thao tác thêm (phải đang là thành viên nhóm)
      * @param groupChatId id của nhóm chat cần thêm thành viên
-     * @param memberId    id của người dùng sẽ được thêm vào nhóm
-     * @return {@code true} nếu thêm thành viên và lưu thành công; {@code false} nếu
-     *         nhóm chat/requester/member không tồn tại, requester không thuộc nhóm,
-     *         member đã có trong nhóm, hoặc xảy ra lỗi khi lưu
+     * @param memberId    id của người dùng được thêm vào nhóm
+     * @throws ChatBoxNotFoundException      nếu không tìm thấy nhóm chat với id tương ứng
+     * @throws UserNotFoundException         nếu không tìm thấy requester hoặc member
+     * @throws UserNotInChatBoxException     nếu requester không phải là thành viên của nhóm
+     * @throws UserAlreadyInChatBoxException nếu member đã là thành viên của nhóm
+     * @throws DataAccessFailureException    nếu lỗi khi lưu vào database
      */
-    public boolean addMemberToGroup(Long requesterId, Long groupChatId, Long memberId){
-        Optional<GroupChat> groupChat=groupChatRepository.findById(groupChatId);
-        Optional<User> requester=userRepository.findById(requesterId);
-        Optional<User> user=userRepository.findById(memberId);
-        if(groupChat.isPresent() && requester.isPresent() && user.isPresent()){
-            GroupChat actualGroupChat=groupChat.get();
-            User actualRequester=requester.get();
-            User actualUser=user.get();
-            Set<User> users=actualGroupChat.getUsers();
-            if(users.contains(actualRequester)){
-                if(!users.contains(actualUser)){
-                    users.add(actualUser);
-                    try{
-                        groupChatRepository.save(actualGroupChat);
-                        return true;
-                    }catch (Exception e){
-                        e.printStackTrace();
-                        return false;
-                    }
-                }else{
-                    return false;
+    public void addMemberToGroup(Long requesterId, Long groupChatId, Long memberId){
+        logger.info("Attempting to add member to group, requesterId={}, groupChatId={}, memberId={}", requesterId, groupChatId, memberId);
+        GroupChat groupChat=mapOptionalGroupChatToEntity(groupChatId);
+        User requester=mapOptionalUserToEntity(requesterId);
+        User user=mapOptionalUserToEntity(memberId);
+        Set<User> users=groupChat.getUsers();
+        if(users.contains(requester)){
+            if(!users.contains(user)){
+                users.add(user);
+                try{
+                    groupChatRepository.save(groupChat);
+                    logger.info("Member added to group successfully, groupChatId={}, memberId={}", groupChatId, memberId);
+                }catch (Exception e){
+                    logger.error("Error occurred while adding member to group, groupChatId={}, memberId={}", groupChatId, memberId, e);
+                    throw new DataAccessFailureException(e);
                 }
             }else{
-                return false;
+                logger.warn("Add member failed: member already in group, groupChatId={}, memberId={}", groupChatId, memberId);
+                throw new UserAlreadyInChatBoxException(groupChatId, memberId);
             }
         }else{
-            return false;
+            logger.warn("Add member failed: requester not in group, groupChatId={}, requesterId={}", groupChatId, requesterId);
+            throw new UserNotInChatBoxException(groupChatId, requesterId);
         }
     }
 
     /**
-     * Xóa một thành viên ra khỏi nhóm chat (do người khác thực hiện, ví dụ leader/vice leader).
+     * Loại bỏ một thành viên khỏi nhóm chat.
      * <p>
-     * Các điều kiện để thao tác hợp lệ:
-     * <ul>
-     *     <li>Requester và member phải khác nhau.</li>
-     *     <li>Cả requester và member đều phải là thành viên của nhóm.</li>
-     *     <li>Requester phải là leader hoặc vice leader.</li>
-     *     <li>Vice leader không được xóa một vice leader khác.</li>
-     *     <li>Không ai được xóa một leader.</li>
-     * </ul>
-     * Nếu member bị xóa đang là vice leader thì đồng thời bị loại khỏi danh sách vice leader.
+     * Requester không được tự loại bỏ chính mình (dùng {@link #outGroupChat} để tự rời nhóm).
+     * Cả requester và member đều phải là thành viên của nhóm. Requester phải là leader hoặc
+     * vice leader mới có quyền loại bỏ người khác. Vice leader không được loại bỏ một
+     * vice leader khác, và không ai được phép loại bỏ một leader.
      *
-     * @param requesterId id của người dùng thực hiện việc xóa thành viên
+     * @param requesterId id của người dùng thực hiện loại bỏ (phải là leader hoặc vice leader)
      * @param groupChatId id của nhóm chat
-     * @param memberId    id của thành viên bị xóa khỏi nhóm
-     * @return {@code true} nếu xóa và lưu thành công; {@code false} nếu vi phạm một trong
-     *         các điều kiện trên, dữ liệu không tồn tại, hoặc xảy ra lỗi khi lưu
+     * @param memberId    id của thành viên bị loại bỏ khỏi nhóm
+     * @throws ChatBoxNotFoundException        nếu không tìm thấy nhóm chat với id tương ứng
+     * @throws UserNotFoundException           nếu không tìm thấy requester hoặc member
+     * @throws InvalidChatBoxOperationException nếu requester tự loại bỏ chính mình,
+     *         requester không phải leader/vice leader, vice leader cố loại bỏ một vice leader khác,
+     *         hoặc cố loại bỏ một leader
+     * @throws UserNotInChatBoxException       nếu requester hoặc member không thuộc nhóm chat
+     * @throws DataAccessFailureException      nếu lỗi khi lưu vào database
      */
-    public boolean removeUserFromGroup(Long requesterId, Long groupChatId, Long memberId){
-        Optional<GroupChat> groupChat=groupChatRepository.findById(groupChatId);
-        Optional<User> member=userRepository.findById(memberId);
-        Optional<User> requester=userRepository.findById(requesterId);
-        if(groupChat.isPresent() && member.isPresent() && requester.isPresent()){
-            GroupChat actualGroupChat=groupChat.get();
-            User actualMember=member.get();
-            User requesterUser=requester.get();
-            Set<User> leaders=actualGroupChat.getLeaders();
-            Set<User> viceLeaders=actualGroupChat.getViceLeaders();
-            Set<User> users=actualGroupChat.getUsers();
-            if(requesterUser.equals(actualMember)){
-                return false;
-            }else if(!users.contains(requesterUser) || !users.contains(actualMember)){
-                return false;
-            }else if(!leaders.contains(requesterUser) && !viceLeaders.contains(requesterUser)){
-                return false;
-            }else if(viceLeaders.contains(actualMember) && viceLeaders.contains(requesterUser)){
-                return false;
-            }else if(leaders.contains(actualMember)){
-                return false;
-            }else{
-                users.remove(actualMember);
-                if(viceLeaders.contains(actualMember)){
-                    viceLeaders.remove(actualMember);
-                }
-                try{
-                    groupChatRepository.save(actualGroupChat);
-                    return true;
-                }catch (Exception e){
-                    e.printStackTrace();
-                    return false;
-                }
-            }
+    public void removeUserFromGroup(Long requesterId, Long groupChatId, Long memberId){
+        logger.info("Attempting to remove member from group, requesterId={}, groupChatId={}, memberId={}", requesterId, groupChatId, memberId);
+        GroupChat groupChat=mapOptionalGroupChatToEntity(groupChatId);
+        User requester=mapOptionalUserToEntity(requesterId);
+        User member=mapOptionalUserToEntity(memberId);
+        Set<User> leaders=groupChat.getLeaders();
+        Set<User> viceLeaders=groupChat.getViceLeaders();
+        Set<User> users=groupChat.getUsers();
+        if(requester.equals(member)){
+            logger.warn("Remove member failed: requester cannot remove themselves, requesterId={}", requesterId);
+            throw new InvalidChatBoxOperationException("Requester cannot remove themselves from groupId: "+groupChatId);
+        }else if(!users.contains(requester) || !users.contains(member)){
+            logger.warn("Remove member failed: requester or member not in group, chatBoxId={}, requesterId={}, memberId={}", groupChatId, requesterId, memberId);
+            Set<Long> ids=Set.of(requesterId, memberId);
+            throw new UserNotInChatBoxException(groupChatId, ids);
+        }else if(!leaders.contains(requester) && !viceLeaders.contains(requester)){
+            logger.warn("Remove member failed: requester is not leader or vice leader, chatBoxId={}, requesterId={}", groupChatId, requesterId);
+            throw new InvalidChatBoxOperationException("user is not leader or vice leader, chatBoxId="+groupChatId+", userId="+requesterId);
+        }else if(viceLeaders.contains(member) && viceLeaders.contains(member)){
+            logger.warn("Remove member failed: vice leader cannot remove another vice leader, requesterId={}, memberId={}", requesterId, memberId);
+            throw new InvalidChatBoxOperationException("Vice leader cannot remove another vice leader, requesterId="+requesterId+", memberId="+memberId);
+        }else if(leaders.contains(member)){
+            logger.warn("Remove member failed: cannot remove a leader, memberId={}", memberId);
+            throw new InvalidChatBoxOperationException("Cannot remove a leader, memberId="+memberId);
         }else{
-            return false;
+            users.remove(member);
+            if(viceLeaders.contains(member)){
+                viceLeaders.remove(member);
+            }
+            try{
+                groupChatRepository.save(groupChat);
+                logger.info("Member removed from group successfully, groupChatId={}, memberId={}", groupChatId, memberId);
+            }catch (Exception e){
+                logger.error("Error occurred while removing member from group, groupChatId={}, memberId={}", groupChatId, memberId, e);
+                throw new DataAccessFailureException(e);
+            }
         }
     }
 
@@ -212,54 +255,51 @@ public class GroupChatService {
      *
      * @param requesterId id của người dùng muốn rời khỏi nhóm
      * @param groupChatId id của nhóm chat cần rời
-     * @return {@code true} nếu rời nhóm và lưu thành công; {@code false} nếu nhóm chat
-     *         hoặc requester không tồn tại, hoặc xảy ra lỗi khi lưu
+     * @throws ChatBoxNotFoundException   nếu không tìm thấy nhóm chat với id tương ứng
+     * @throws UserNotFoundException      nếu không tìm thấy requester
+     * @throws DataAccessFailureException nếu lỗi khi lưu vào database
      */
-    public boolean outGroupChat(Long requesterId, Long groupChatId){
-        Optional<GroupChat> groupChat=groupChatRepository.findById(groupChatId);
-        Optional<User> requester=userRepository.findById(requesterId);
-        if(groupChat.isPresent() && requester.isPresent()){
-            GroupChat actualGroupChat=groupChat.get();
-            User requesterUser=requester.get();
-            Set<User> users=actualGroupChat.getUsers();
-            Set<User> leaders=actualGroupChat.getLeaders();
-            Set<User> viceLeaders=actualGroupChat.getViceLeaders();
-            users.remove(requesterUser);
-            int leadersSize=leaders.size();
-            int viceLeadersSize=viceLeaders.size();
-            int usersSize=users.size();
-            if(leaders.contains(requesterUser)){
-                if(leadersSize==1){
-                    if(viceLeadersSize>=1){
-                        User nextLeader=viceLeaders.iterator().next();
-                        leaders.remove(requesterUser);
-                        viceLeaders.remove(nextLeader);
+    public void outGroupChat(Long requesterId, Long groupChatId){
+        logger.info("Attempting to leave group chat, requesterId={}, groupChatId={}", requesterId, groupChatId);
+        GroupChat groupChat=mapOptionalGroupChatToEntity(groupChatId);
+        User requester=mapOptionalUserToEntity(requesterId);
+        Set<User> users=groupChat.getUsers();
+        Set<User> leaders=groupChat.getLeaders();
+        Set<User> viceLeaders=groupChat.getViceLeaders();
+        users.remove(requester);
+        int leadersSize=leaders.size();
+        int viceLeadersSize=viceLeaders.size();
+        int usersSize=users.size();
+        if(leaders.contains(requester)){
+            if(leadersSize==1){
+                if(viceLeadersSize>=1){
+                    User nextLeader=viceLeaders.iterator().next();
+                    leaders.remove(requester);
+                    viceLeaders.remove(nextLeader);
+                    leaders.add(nextLeader);
+                }else{
+                    if(usersSize>=1){
+                        User nextLeader=users.iterator().next();
+                        leaders.remove(requester);
                         leaders.add(nextLeader);
                     }else{
-                        if(usersSize>=1){
-                            User nextLeader=users.iterator().next();
-                            leaders.remove(requesterUser);
-                            leaders.add(nextLeader);
-                        }else{
-                            leaders.remove(requesterUser);
-                            actualGroupChat.setActive(false);
-                        }
+                        leaders.remove(requester);
+                        groupChat.setActive(false);
+                        logger.info("Group chat has no members left, marking inactive, groupChatId={}", groupChatId);
                     }
-                }else{
-                    leaders.remove(requesterUser);
                 }
-            }else if(viceLeaders.contains(requesterUser)){
-                viceLeaders.remove(requesterUser);
+            }else{
+                leaders.remove(requester);
             }
-            try{
-                groupChatRepository.save(actualGroupChat);
-                return true;
-            }catch (Exception e){
-                e.printStackTrace();
-                return false;
-            }
-        }else{
-            return false;
+        }else if(viceLeaders.contains(requester)){
+            viceLeaders.remove(requester);
+        }
+        try{
+            groupChatRepository.save(groupChat);
+            logger.info("User left group chat successfully, requesterId={}, groupChatId={}", requesterId, groupChatId);
+        }catch (Exception e){
+            logger.error("Error occurred while leaving group chat, requesterId={}, groupChatId={}", requesterId, groupChatId, e);
+            throw new DataAccessFailureException(e);
         }
     }
 
@@ -267,18 +307,13 @@ public class GroupChatService {
      * Lấy thông tin nhóm chat theo id.
      *
      * @param groupChatId id của nhóm chat cần truy vấn
-     * @return {@link GroupChatDTO} chứa thông tin nhóm chat nếu tìm thấy;
-     *         trả về {@code null} nếu không tồn tại nhóm chat với id tương ứng
+     * @return {@link GroupChatDTO} chứa thông tin nhóm chat
+     * @throws ChatBoxNotFoundException nếu không tìm thấy nhóm chat với id tương ứng
      */
     public GroupChatDTO getGroupChatById(Long groupChatId){
-        Optional<GroupChat> groupChat=groupChatRepository.findById(groupChatId);
-        if(groupChat.isPresent()){
-            GroupChat actualGroupChat=groupChat.get();
-            GroupChatDTO groupChatDTO= GroupChatMapper.mapGroupChatToGroupChatDTO(actualGroupChat);
-            return groupChatDTO;
-        }else{
-            return null;
-        }
+        logger.debug("Fetching group chat by id, groupChatId={}", groupChatId);
+        GroupChat groupChat=mapOptionalGroupChatToEntity(groupChatId);
+        return GroupChatMapper.mapGroupChatToGroupChatDTO(groupChat);
     }
 
     /**
@@ -292,12 +327,14 @@ public class GroupChatService {
      *         trả về danh sách rỗng nếu không có kết quả nào phù hợp
      */
     public List<GroupChatDTO> getGroupChatByNameContaining(String groupChatKeyword, Long userId){
+        logger.debug("Fetching group chats by name containing keyword, keyword={}, userId={}", groupChatKeyword, userId);
         List<GroupChat> groupChats=groupChatRepository.findByNameContainingAndUserIdAndIsActiveTrueOrderByLastActiveTimeDesc(groupChatKeyword,userId);
         List<GroupChatDTO> groupChatDTOs=new ArrayList<>();
         for(GroupChat groupChat:groupChats){
             GroupChatDTO groupChatDTO=GroupChatMapper.mapGroupChatToGroupChatDTO(groupChat);
             groupChatDTOs.add(groupChatDTO);
         }
+        logger.debug("Found {} group chats matching keyword for userId={}", groupChatDTOs.size(), userId);
         return groupChatDTOs;
     }
 
@@ -311,41 +348,44 @@ public class GroupChatService {
      * @param requesterId id của người dùng thực hiện thăng cấp (phải là leader)
      * @param groupChatId id của nhóm chat
      * @param nomineeId   id của thành viên được thăng cấp lên vice leader
-     * @return {@code true} nếu thăng cấp và lưu thành công; {@code false} nếu vi phạm
-     *         điều kiện trên, dữ liệu không tồn tại, hoặc xảy ra lỗi khi lưu
+     * @throws ChatBoxNotFoundException        nếu không tìm thấy nhóm chat với id tương ứng
+     * @throws UserNotFoundException           nếu không tìm thấy requester hoặc nominee
+     * @throws InvalidChatBoxOperationException nếu requester tự thăng cấp cho chính mình,
+     *         requester không phải leader, hoặc nominee đã là leader/vice leader
+     * @throws UserNotInChatBoxException       nếu nominee không thuộc nhóm chat
+     * @throws DataAccessFailureException      nếu lỗi khi lưu vào database
      */
-    public boolean promoteToViceLeader(Long requesterId, Long groupChatId, Long nomineeId){
-        Optional<GroupChat> groupChat=groupChatRepository.findById(groupChatId);
-        Optional<User> requester=userRepository.findById(requesterId);
-        Optional<User> nominee=userRepository.findById(nomineeId);
-        if(groupChat.isPresent() && requester.isPresent() && nominee.isPresent()){
-            GroupChat actualGroupChat=groupChat.get();
-            User actualRequester=requester.get();
-            User actualNominee=nominee.get();
-            Set<User> leaders=actualGroupChat.getLeaders();
-            Set<User> viceLeaders=actualGroupChat.getViceLeaders();
-            Set<User> users=actualGroupChat.getUsers();
-            if(actualNominee.equals(actualRequester)){
-                return false;
-            }
-            if(leaders.contains(actualRequester) && users.contains(actualNominee)){
-                if(!viceLeaders.contains(actualNominee) && !leaders.contains(actualNominee)){
-                    viceLeaders.add(actualNominee);
-                    try{
-                        groupChatRepository.save(actualGroupChat);
-                        return true;
-                    }catch(Exception e){
-                        e.printStackTrace();
-                        return false;
-                    }
-                }else{
-                    return false;
-                }
-            }else{
-                return false;
-            }
-        }else{
-            return false;
+    public void promoteToViceLeader(Long requesterId, Long groupChatId, Long nomineeId){
+        logger.info("Attempting to promote member to vice leader, requesterId={}, groupChatId={}, nomineeId={}", requesterId, groupChatId, nomineeId);
+        GroupChat groupChat=mapOptionalGroupChatToEntity(groupChatId);
+        User requester=mapOptionalUserToEntity(requesterId);
+        User nominee=mapOptionalUserToEntity(nomineeId);
+        Set<User> leaders=groupChat.getLeaders();
+        Set<User> viceLeaders=groupChat.getViceLeaders();
+        Set<User> users=groupChat.getUsers();
+        if(nominee.equals(requester)){
+            logger.warn("Promote to vice leader failed: requester cannot promote themselves, requesterId={}", requesterId);
+            throw new InvalidChatBoxOperationException("Requester cannot promote themselves, requesterId="+requesterId);
+        }
+        if(!leaders.contains(requester)){
+            logger.warn("Promote to vice leader failed: requester is not leader, groupChatId={}, requesterId={}", groupChatId, requesterId);
+            throw new InvalidChatBoxOperationException("Requester is not leader, groupChatId="+groupChatId+", requesterId="+requesterId);
+        }
+        if(!users.contains(nominee)){
+            logger.warn("Promote to vice leader failed: nominee not in group, groupChatId={}, nomineeId={}", groupChatId, nomineeId);
+            throw new UserNotInChatBoxException(groupChatId, nomineeId);
+        }
+        if(viceLeaders.contains(nominee) || leaders.contains(nominee)){
+            logger.warn("Promote to vice leader failed: nominee already leader or vice leader, nomineeId={}", nomineeId);
+            throw new InvalidChatBoxOperationException("Nominee already leader or vice leader, nomineeId="+nomineeId);
+        }
+        viceLeaders.add(nominee);
+        try{
+            groupChatRepository.save(groupChat);
+            logger.info("Member promoted to vice leader successfully, groupChatId={}, nomineeId={}", groupChatId, nomineeId);
+        }catch(Exception e){
+            logger.error("Error occurred while promoting member to vice leader, groupChatId={}, nomineeId={}", groupChatId, nomineeId, e);
+            throw new DataAccessFailureException(e);
         }
     }
 
@@ -360,52 +400,48 @@ public class GroupChatService {
      * @param requesterId id của người dùng thực hiện thăng cấp (phải là leader)
      * @param groupChatId id của nhóm chat
      * @param nomineeId   id của thành viên được thăng cấp lên leader
-     * @return {@code true} nếu thăng cấp và lưu thành công; {@code false} nếu vi phạm
-     *         điều kiện trên, dữ liệu không tồn tại, hoặc xảy ra lỗi khi lưu
+     * @throws ChatBoxNotFoundException        nếu không tìm thấy nhóm chat với id tương ứng
+     * @throws UserNotFoundException           nếu không tìm thấy requester hoặc nominee
+     * @throws InvalidChatBoxOperationException nếu requester tự thăng cấp cho chính mình,
+     *         requester không phải leader, hoặc nominee đã là leader
+     * @throws UserNotInChatBoxException       nếu nominee không thuộc nhóm chat
+     * @throws DataAccessFailureException      nếu lỗi khi lưu vào database
      */
-    public boolean promoteToLeader(Long requesterId, Long groupChatId, Long nomineeId){
-        Optional<GroupChat> groupChat=groupChatRepository.findById(groupChatId);
-        Optional<User> requester=userRepository.findById(requesterId);
-        Optional<User> nominee=userRepository.findById(nomineeId);
-        if(groupChat.isPresent() && requester.isPresent() && nominee.isPresent()){
-            GroupChat actualGroupChat=groupChat.get();
-            User actualRequester=requester.get();
-            User actualNominee=nominee.get();
-            Set<User> leaders=actualGroupChat.getLeaders();
-            Set<User> viceLeaders=actualGroupChat.getViceLeaders();
-            Set<User> users=actualGroupChat.getUsers();
-            if(actualNominee.equals(actualRequester)){
-                return false;
-            }
-            if(leaders.contains(actualRequester) && users.contains(actualNominee)){
-                if(!viceLeaders.contains(actualNominee) && !leaders.contains(actualNominee)){
-                    leaders.add(actualNominee);
-                    try{
-                        groupChatRepository.save(actualGroupChat);
-                        return true;
-                    }catch(Exception e){
-                        e.printStackTrace();
-                        return false;
-                    }
-                }else if(!leaders.contains(actualNominee) && viceLeaders.contains(actualNominee)){
-                    leaders.add(actualNominee);
-                    viceLeaders.remove(actualNominee);
-                    try{
-                        groupChatRepository.save(actualGroupChat);
-                        return true;
-                    }catch(Exception e){
-                        e.printStackTrace();
-                        return false;
-                    }
-                }
-                else{
-                    return false;
-                }
-            }else{
-                return false;
-            }
-        }else{
-            return false;
+    public void promoteToLeader(Long requesterId, Long groupChatId, Long nomineeId){
+        logger.info("Attempting to promote member to leader, requesterId={}, groupChatId={}, nomineeId={}", requesterId, groupChatId, nomineeId);
+        GroupChat groupChat=mapOptionalGroupChatToEntity(groupChatId);
+        User requester=mapOptionalUserToEntity(requesterId);
+        User nominee=mapOptionalUserToEntity(nomineeId);
+        Set<User> leaders=groupChat.getLeaders();
+        Set<User> viceLeaders=groupChat.getViceLeaders();
+        Set<User> users=groupChat.getUsers();
+        if(nominee.equals(requester)){
+            logger.warn("Promote to leader failed: requester cannot promote themselves, requesterId={}", requesterId);
+            throw new InvalidChatBoxOperationException("Requester cannot promote themselves, requesterId="+requesterId);
+        }
+        if(!leaders.contains(requester)){
+            logger.warn("Promote to leader failed: requester is not leader, groupChatId={}, requesterId={}", groupChatId, requesterId);
+            throw new InvalidChatBoxOperationException("Requester is not leader, groupChatId="+groupChatId+", requesterId="+requesterId);
+        }
+        if(!users.contains(nominee)){
+            logger.warn("Promote to leader failed: nominee not in group, groupChatId={}, nomineeId={}", groupChatId, nomineeId);
+            throw new UserNotInChatBoxException(groupChatId, nomineeId);
+        }
+        if(leaders.contains(nominee)){
+            logger.warn("Promote to leader failed: nominee already a leader, nomineeId={}", nomineeId);
+            throw new InvalidChatBoxOperationException("Nominee already a leader, nomineeId="+nomineeId);
+        }
+        boolean wasViceLeader=viceLeaders.contains(nominee);
+        leaders.add(nominee);
+        if(wasViceLeader){
+            viceLeaders.remove(nominee);
+        }
+        try{
+            groupChatRepository.save(groupChat);
+            logger.info("Member promoted to leader successfully, groupChatId={}, nomineeId={}, fromViceLeader={}", groupChatId, nomineeId, wasViceLeader);
+        }catch(Exception e){
+            logger.error("Error occurred while promoting member to leader, groupChatId={}, nomineeId={}", groupChatId, nomineeId, e);
+            throw new DataAccessFailureException(e);
         }
     }
 
@@ -418,42 +454,45 @@ public class GroupChatService {
      * @param requesterId id của người dùng thực hiện hạ cấp (phải là leader)
      * @param groupChatId id của nhóm chat
      * @param nomineeId   id của leader bị hạ cấp xuống vice leader
-     * @return {@code true} nếu hạ cấp và lưu thành công; {@code false} nếu vi phạm
-     *         điều kiện trên, dữ liệu không tồn tại, hoặc xảy ra lỗi khi lưu
+     * @throws ChatBoxNotFoundException        nếu không tìm thấy nhóm chat với id tương ứng
+     * @throws UserNotFoundException           nếu không tìm thấy requester hoặc nominee
+     * @throws InvalidChatBoxOperationException nếu requester tự hạ cấp cho chính mình,
+     *         requester không phải leader, hoặc nominee không phải leader
+     * @throws UserNotInChatBoxException       nếu nominee không thuộc nhóm chat
+     * @throws DataAccessFailureException      nếu lỗi khi lưu vào database
      */
-    public boolean demoteToViceLeader(Long requesterId, Long groupChatId, Long nomineeId){
-        Optional<GroupChat> groupChat=groupChatRepository.findById(groupChatId);
-        Optional<User> requester=userRepository.findById(requesterId);
-        Optional<User> nominee=userRepository.findById(nomineeId);
-        if(groupChat.isPresent() && requester.isPresent() && nominee.isPresent()){
-            GroupChat actualGroupChat=groupChat.get();
-            User actualRequester=requester.get();
-            User actualNominee=nominee.get();
-            Set<User> leaders=actualGroupChat.getLeaders();
-            Set<User> viceLeaders=actualGroupChat.getViceLeaders();
-            Set<User> users=actualGroupChat.getUsers();
-            if(actualNominee.equals(actualRequester)){
-                return false;
-            }
-            if(leaders.contains(actualRequester) && users.contains(actualNominee)){
-                if(leaders.contains(actualNominee)){
-                    leaders.remove(actualNominee);
-                    viceLeaders.add(actualNominee);
-                    try{
-                        groupChatRepository.save(actualGroupChat);
-                        return true;
-                    }catch(Exception e){
-                        e.printStackTrace();
-                        return false;
-                    }
-                }else{
-                    return false;
-                }
-            }else{
-                return false;
-            }
-        }else{
-            return false;
+    public void demoteToViceLeader(Long requesterId, Long groupChatId, Long nomineeId){
+        logger.info("Attempting to demote leader to vice leader, requesterId={}, groupChatId={}, nomineeId={}", requesterId, groupChatId, nomineeId);
+        GroupChat groupChat=mapOptionalGroupChatToEntity(groupChatId);
+        User requester=mapOptionalUserToEntity(requesterId);
+        User nominee=mapOptionalUserToEntity(nomineeId);
+        Set<User> leaders=groupChat.getLeaders();
+        Set<User> viceLeaders=groupChat.getViceLeaders();
+        Set<User> users=groupChat.getUsers();
+        if(nominee.equals(requester)){
+            logger.warn("Demote to vice leader failed: requester cannot demote themselves, requesterId={}", requesterId);
+            throw new InvalidChatBoxOperationException("Requester cannot demote themselves, requesterId="+requesterId);
+        }
+        if(!leaders.contains(requester)){
+            logger.warn("Demote to vice leader failed: requester is not leader, groupChatId={}, requesterId={}", groupChatId, requesterId);
+            throw new InvalidChatBoxOperationException("Requester is not leader, groupChatId="+groupChatId+", requesterId="+requesterId);
+        }
+        if(!users.contains(nominee)){
+            logger.warn("Demote to vice leader failed: nominee not in group, groupChatId={}, nomineeId={}", groupChatId, nomineeId);
+            throw new UserNotInChatBoxException(groupChatId, nomineeId);
+        }
+        if(!leaders.contains(nominee)){
+            logger.warn("Demote to vice leader failed: nominee is not a leader, nomineeId={}", nomineeId);
+            throw new InvalidChatBoxOperationException("Nominee is not a leader, nomineeId="+nomineeId);
+        }
+        leaders.remove(nominee);
+        viceLeaders.add(nominee);
+        try{
+            groupChatRepository.save(groupChat);
+            logger.info("Leader demoted to vice leader successfully, groupChatId={}, nomineeId={}", groupChatId, nomineeId);
+        }catch(Exception e){
+            logger.error("Error occurred while demoting leader to vice leader, groupChatId={}, nomineeId={}", groupChatId, nomineeId, e);
+            throw new DataAccessFailureException(e);
         }
     }
 
@@ -467,51 +506,47 @@ public class GroupChatService {
      * @param requesterId id của người dùng thực hiện hạ cấp (phải là leader)
      * @param groupChatId id của nhóm chat
      * @param nomineeId   id của thành viên (leader hoặc vice leader) bị hạ xuống thành viên thường
-     * @return {@code true} nếu hạ cấp và lưu thành công; {@code false} nếu vi phạm
-     *         điều kiện trên, dữ liệu không tồn tại, hoặc xảy ra lỗi khi lưu
+     * @throws ChatBoxNotFoundException        nếu không tìm thấy nhóm chat với id tương ứng
+     * @throws UserNotFoundException           nếu không tìm thấy requester hoặc nominee
+     * @throws InvalidChatBoxOperationException nếu requester tự hạ cấp cho chính mình,
+     *         requester không phải leader, hoặc nominee không phải leader/vice leader
+     * @throws UserNotInChatBoxException       nếu nominee không thuộc nhóm chat
+     * @throws DataAccessFailureException      nếu lỗi khi lưu vào database
      */
-    public boolean demoteToUser(Long requesterId, Long groupChatId, Long nomineeId){
-        Optional<GroupChat> groupChat=groupChatRepository.findById(groupChatId);
-        Optional<User> requester=userRepository.findById(requesterId);
-        Optional<User> nominee=userRepository.findById(nomineeId);
-        if(groupChat.isPresent() && requester.isPresent() && nominee.isPresent()){
-            GroupChat actualGroupChat=groupChat.get();
-            User actualRequester=requester.get();
-            User actualNominee=nominee.get();
-            Set<User> leaders=actualGroupChat.getLeaders();
-            Set<User> viceLeaders=actualGroupChat.getViceLeaders();
-            Set<User> users=actualGroupChat.getUsers();
-            if(actualNominee.equals(actualRequester)){
-                return false;
-            }
-            if(leaders.contains(actualRequester) && users.contains(actualNominee)){
-                if(leaders.contains(actualNominee)){
-                    leaders.remove(actualNominee);
-                    try{
-                        groupChatRepository.save(actualGroupChat);
-                        return true;
-                    }catch(Exception e){
-                        e.printStackTrace();
-                        return false;
-                    }
-                }else if(viceLeaders.contains(actualNominee)){
-                    viceLeaders.remove(actualNominee);
-                    try{
-                        groupChatRepository.save(actualGroupChat);
-                        return true;
-                    }catch(Exception e){
-                        e.printStackTrace();
-                        return false;
-                    }
-                }
-                else{
-                    return false;
-                }
-            }else{
-                return false;
-            }
+    public void demoteToUser(Long requesterId, Long groupChatId, Long nomineeId){
+        logger.info("Attempting to demote member to regular user, requesterId={}, groupChatId={}, nomineeId={}", requesterId, groupChatId, nomineeId);
+        GroupChat groupChat=mapOptionalGroupChatToEntity(groupChatId);
+        User requester=mapOptionalUserToEntity(requesterId);
+        User nominee=mapOptionalUserToEntity(nomineeId);
+        Set<User> leaders=groupChat.getLeaders();
+        Set<User> viceLeaders=groupChat.getViceLeaders();
+        Set<User> users=groupChat.getUsers();
+        if(nominee.equals(requester)){
+            logger.warn("Demote to user failed: requester cannot demote themselves, requesterId={}", requesterId);
+            throw new InvalidChatBoxOperationException("Requester cannot demote themselves, requesterId="+requesterId);
+        }
+        if(!leaders.contains(requester)){
+            logger.warn("Demote to user failed: requester is not leader, groupChatId={}, requesterId={}", groupChatId, requesterId);
+            throw new InvalidChatBoxOperationException("Requester is not leader, groupChatId="+groupChatId+", requesterId="+requesterId);
+        }
+        if(!users.contains(nominee)){
+            logger.warn("Demote to user failed: nominee not in group, groupChatId={}, nomineeId={}", groupChatId, nomineeId);
+            throw new UserNotInChatBoxException(groupChatId, nomineeId);
+        }
+        if(leaders.contains(nominee)){
+            leaders.remove(nominee);
+        }else if(viceLeaders.contains(nominee)){
+            viceLeaders.remove(nominee);
         }else{
-            return false;
+            logger.warn("Demote to user failed: nominee is neither leader nor vice leader, nomineeId={}", nomineeId);
+            throw new InvalidChatBoxOperationException("Nominee is neither leader nor vice leader, nomineeId="+nomineeId);
+        }
+        try{
+            groupChatRepository.save(groupChat);
+            logger.info("Member demoted to regular user successfully, groupChatId={}, nomineeId={}", groupChatId, nomineeId);
+        }catch(Exception e){
+            logger.error("Error occurred while demoting member to user, groupChatId={}, nomineeId={}", groupChatId, nomineeId, e);
+            throw new DataAccessFailureException(e);
         }
     }
 
@@ -523,12 +558,14 @@ public class GroupChatService {
      *         mà người dùng tham gia; trả về danh sách rỗng nếu không có nhóm nào
      */
     public List<GroupChatDTO> getAllGroupChatByUserId(Long userId){
+        logger.debug("Fetching all active group chats for userId={}", userId);
         List<GroupChat> groupChats=groupChatRepository.findByUserIdAndIsActiveTrue(userId);
         List<GroupChatDTO> groupChatDTOS=new ArrayList<>();
         for(GroupChat groupChat:groupChats){
             GroupChatDTO groupChatDTO=GroupChatMapper.mapGroupChatToGroupChatDTO(groupChat);
             groupChatDTOS.add(groupChatDTO);
         }
+        logger.debug("Found {} active group chats for userId={}", groupChatDTOS.size(), userId);
         return groupChatDTOS;
     }
 }

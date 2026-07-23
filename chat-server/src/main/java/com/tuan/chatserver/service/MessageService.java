@@ -5,10 +5,13 @@ import com.tuan.chatserver.dto.MessageDTO;
 import com.tuan.chatserver.entity.ChatBox;
 import com.tuan.chatserver.entity.User;
 import com.tuan.chatserver.enums.MessageStatus;
+import com.tuan.chatserver.exception.*;
 import com.tuan.chatserver.mapper.MessageMapper;
 import com.tuan.chatserver.repository.ChatBoxRepository;
 import com.tuan.chatserver.repository.MessageRepository;
 import com.tuan.chatserver.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.MongoTransactionManager;
@@ -17,7 +20,6 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.Optional;
 
 /**
@@ -29,6 +31,8 @@ import java.util.Optional;
  */
 @Service
 public class MessageService {
+    private final Logger logger = LoggerFactory.getLogger(this.getClass());
+
     private final MessageRepository messageRepository;
     private final ChatBoxRepository chatBoxRepository;
     private final UserRepository userRepository;
@@ -61,12 +65,14 @@ public class MessageService {
      *         trả về danh sách rỗng nếu không có tin nhắn nào
      */
     public List<MessageDTO> findByChatBoxIdOrderByTimestampDesc(Long chatBoxId) {
+        logger.debug("Fetching messages ordered by timestamp desc, chatBoxId={}", chatBoxId);
         List<Message> messages = messageRepository.findByChatBoxIdOrderByTimestampDesc(chatBoxId);
         List<MessageDTO> messageDTOs = new ArrayList<>();
         for (Message message : messages) {
             MessageDTO messageDTO = messageMapper.mapMessageToMessageDTO(message);
             messageDTOs.add(messageDTO);
         }
+        logger.debug("Found {} message(s) for chatBoxId={}", messageDTOs.size(), chatBoxId);
         return messageDTOs;
     }
 
@@ -80,12 +86,14 @@ public class MessageService {
      *         sắp xếp theo timestamp giảm dần; trả về danh sách rỗng nếu không có tin nhắn nào
      */
     public List<MessageDTO> findBySenderIdAndChatBoxIdOrderByTimestampDesc(Long senderId, Long chatBoxId) {
+        logger.debug("Fetching messages by senderId={} and chatBoxId={}, ordered by timestamp desc", senderId, chatBoxId);
         List<Message> messages = messageRepository.findBySenderIdAndChatBoxIdOrderByTimestampDesc(senderId, chatBoxId);
         List<MessageDTO> messageDTOs = new ArrayList<>();
         for (Message message : messages) {
             MessageDTO messageDTO = messageMapper.mapMessageToMessageDTO(message);
             messageDTOs.add(messageDTO);
         }
+        logger.debug("Found {} message(s) for senderId={}, chatBoxId={}", messageDTOs.size(), senderId, chatBoxId);
         return messageDTOs;
     }
 
@@ -100,12 +108,14 @@ public class MessageService {
      *         sắp xếp theo timestamp giảm dần; trả về danh sách rỗng nếu không có tin nhắn nào
      */
     public List<MessageDTO> findByChatBoxIdAndTimestampBetweenOrderByTimestampDesc(Long chatBoxId, LocalDateTime startTime, LocalDateTime endTime){
+        logger.debug("Fetching messages for chatBoxId={} between startTime={} and endTime={}", chatBoxId, startTime, endTime);
         List<Message> messages = messageRepository.findByChatBoxIdAndTimestampBetweenOrderByTimestampDesc(chatBoxId,startTime,endTime);
         List<MessageDTO> messageDTOs = new ArrayList<>();
         for (Message message : messages) {
             MessageDTO messageDTO = messageMapper.mapMessageToMessageDTO(message);
             messageDTOs.add(messageDTO);
         }
+        logger.debug("Found {} message(s) for chatBoxId={} in given time range", messageDTOs.size(), chatBoxId);
         return messageDTOs;
     }
 
@@ -121,12 +131,14 @@ public class MessageService {
      *         sắp xếp theo timestamp giảm dần; trả về danh sách rỗng nếu không có tin nhắn nào
      */
     public List<MessageDTO> findBySenderIdAndChatBoxIdAndTimestampBetweenOrderByTimestampDesc(Long senderId, Long chatBoxId, LocalDateTime startTime, LocalDateTime endTime){
+        logger.debug("Fetching messages by senderId={} for chatBoxId={} between startTime={} and endTime={}", senderId, chatBoxId, startTime, endTime);
         List<Message> messages = messageRepository.findBySenderIdAndChatBoxIdAndTimestampBetweenOrderByTimestampDesc(senderId,chatBoxId,startTime,endTime);
         List<MessageDTO> messageDTOs = new ArrayList<>();
         for (Message message : messages) {
             MessageDTO messageDTO = messageMapper.mapMessageToMessageDTO(message);
             messageDTOs.add(messageDTO);
         }
+        logger.debug("Found {} message(s) for senderId={}, chatBoxId={} in given time range", messageDTOs.size(), senderId, chatBoxId);
         return messageDTOs;
     }
 
@@ -147,26 +159,36 @@ public class MessageService {
      * @param senderId  id của người gửi tin nhắn
      * @param chatBoxId id của đoạn chat mà tin nhắn sẽ được gửi đến
      * @param content   nội dung của tin nhắn (không được để trống)
-     * @return {@code true} nếu gửi và lưu tin nhắn thành công; {@code false} nếu chatbox/sender
-     *         không tồn tại, sender không phải thành viên của chatbox, nội dung rỗng, hoặc xảy ra lỗi
-     * @throws NoSuchElementException nếu không tìm thấy chatbox hoặc sender trong hệ thống
+     * @throws ChatBoxNotFoundException     nếu không tìm thấy chatbox với id tương ứng
+     * @throws UserNotFoundException        nếu không tìm thấy sender với id tương ứng
+     * @throws UserNotInChatBoxException    nếu sender không phải là thành viên của chatbox
+     * @throws EmptyMessageContentException nếu nội dung tin nhắn rỗng
      */
     @Transactional
-    public boolean sendMessage(Long senderId, Long chatBoxId, String content){
-        ChatBox chatBox= chatBoxRepository.findById(chatBoxId).orElseThrow(() -> new NoSuchElementException("Cannot find chatbox"));
-        User sender=userRepository.findById(senderId).orElseThrow(() -> new NoSuchElementException("Cannot find sender"));
+    public void sendMessage(Long senderId, Long chatBoxId, String content){
+        logger.info("Attempting to send message, senderId={}, chatBoxId={}", senderId, chatBoxId);
+        ChatBox chatBox= chatBoxRepository.findById(chatBoxId).orElseThrow(() -> {
+            logger.warn("Send message failed: chatbox not found, chatBoxId={}", chatBoxId);
+            return new ChatBoxNotFoundException(chatBoxId);
+        });
+        User sender=userRepository.findById(senderId).orElseThrow(() -> {
+            logger.warn("Send message failed: sender not found, senderId={}", senderId);
+            return new UserNotFoundException(senderId);
+        });
         if(chatBox.getUsers().contains(sender)){
             if(!content.isEmpty()){
                 chatBox.setLastActiveTime(LocalDateTime.now());
                 chatBoxRepository.save(chatBox);
                 Message message=new Message(senderId, chatBoxId, LocalDateTime.now(), true, MessageStatus.SENT, content);
                 messageRepository.save(message);
-                return true;
+                logger.info("Message sent successfully, senderId={}, chatBoxId={}", senderId, chatBoxId);
             }else{
-                return false;
+                logger.warn("Send message failed: content is empty, senderId={}, chatBoxId={}", senderId, chatBoxId);
+                throw new EmptyMessageContentException();
             }
         }else{
-            return false;
+            logger.warn("Send message failed: sender is not a member of chatbox, senderId={}, chatBoxId={}", senderId, chatBoxId);
+            throw new UserNotInChatBoxException(chatBoxId, senderId);
         }
     }
 
@@ -174,14 +196,16 @@ public class MessageService {
      * Cập nhật trạng thái của một tin nhắn theo quy trình: SENT → RECEIVED → SEEN.
      * <p>
      * Mỗi lần gọi phương thức sẽ nâng cấp trạng thái tin nhắn lên một bậc.
-     * Nếu tin nhắn đã ở trạng thái {@link MessageStatus#SEEN}, trạng thái sẽ không thay đổi
-     * và phương thức trả về {@code false}.
+     * Nếu tin nhắn đã ở trạng thái {@link MessageStatus#SEEN}, phương thức sẽ ném exception
+     * và trạng thái sẽ không thay đổi.
      *
      * @param messageId id (ObjectId) của tin nhắn cần cập nhật trạng thái
-     * @return {@code true} nếu cập nhật trạng thái và lưu thành công; {@code false} nếu
-     *         tin nhắn không tồn tại, đã ở trạng thái SEEN, hoặc xảy ra lỗi khi lưu
+     * @throws MessageNotExistsException   nếu không tìm thấy tin nhắn với id tương ứng
+     * @throws MessageAlreadySeenException nếu tin nhắn đã ở trạng thái SEEN
+     * @throws DataAccessFailureException  nếu lỗi khi lưu vào database
      */
-    public boolean updateMessageStatus(String messageId){
+    public void updateMessageStatus(String messageId){
+        logger.info("Attempting to update message status, messageId={}", messageId);
         Optional<Message> message=messageRepository.findById(messageId);
         if(message.isPresent()){
             Message actualMessage=message.get();
@@ -191,18 +215,20 @@ public class MessageService {
             }else if(messageStatus == MessageStatus.RECEIVED){
                 messageStatus=MessageStatus.SEEN;
             }else if(messageStatus == MessageStatus.SEEN){
-                return false;
+                logger.warn("Update message status failed: message already at SEEN status, messageId={}", messageId);
+                throw new MessageAlreadySeenException(messageId);
             }
             actualMessage.setStatus(messageStatus);
             try{
                 messageRepository.save(actualMessage);
-                return true;
+                logger.info("Message status updated successfully, messageId={}, newStatus={}", messageId, messageStatus);
             }catch(Exception e){
-                e.printStackTrace();
-                return false;
+                logger.error("Error occurred while updating message status, messageId={}", messageId, e);
+                throw new DataAccessFailureException(e);
             }
         }else{
-            return false;
+            logger.warn("Update message status failed: message not found, messageId={}", messageId);
+            throw new MessageNotExistsException(messageId);
         }
     }
 
@@ -213,10 +239,12 @@ public class MessageService {
      * Sau khi thu hồi, tin nhắn sẽ không còn hiển thị cho người nhận.
      *
      * @param messageId id (ObjectId) của tin nhắn cần thu hồi
-     * @return {@code true} nếu thu hồi và lưu thành công; {@code false} nếu tin nhắn không tồn tại,
-     *         đã bị thu hồi (viewable = false), hoặc xảy ra lỗi khi lưu
+     * @throws MessageNotExistsException     nếu không tìm thấy tin nhắn với id tương ứng
+     * @throws MessageAlreadyRecallException nếu tin nhắn đã bị thu hồi (viewable = false)
+     * @throws DataAccessFailureException    nếu lỗi khi lưu vào database
      */
-    public boolean recallMessage(String messageId){
+    public void recallMessage(String messageId){
+        logger.info("Attempting to recall message, messageId={}", messageId);
         Optional<Message> message=messageRepository.findById(messageId);
         if(message.isPresent()){
             Message actualMessage=message.get();
@@ -225,16 +253,18 @@ public class MessageService {
                 actualMessage.setViewable(false);
                 try{
                     messageRepository.save(actualMessage);
-                    return true;
+                    logger.info("Message recalled successfully, messageId={}", messageId);
                 }catch(Exception e){
-                    e.printStackTrace();
-                    return false;
+                    logger.error("Error occurred while recalling message, messageId={}", messageId, e);
+                    throw new DataAccessFailureException(e);
                 }
             }else{
-                return false;
+                logger.warn("Recall message failed: message already recalled (not viewable), messageId={}", messageId);
+                throw new MessageAlreadyRecallException(messageId);
             }
         }else{
-            return false;
+            logger.warn("Recall message failed: message not found, messageId={}", messageId);
+            throw new MessageNotExistsException(messageId);
         }
     }
 }

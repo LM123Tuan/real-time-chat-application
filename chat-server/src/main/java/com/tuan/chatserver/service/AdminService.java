@@ -7,6 +7,9 @@ import com.tuan.chatserver.dto.UserDTO;
 import com.tuan.chatserver.entity.Admin;
 import com.tuan.chatserver.entity.ChatBox;
 import com.tuan.chatserver.entity.User;
+import com.tuan.chatserver.exception.DataAccessFailureException;
+import com.tuan.chatserver.exception.UserNotFoundException;
+import com.tuan.chatserver.exception.UsernameOrEmailAlreadyExistsException;
 import com.tuan.chatserver.mapper.AdminMapper;
 import com.tuan.chatserver.mapper.ChatBoxMapper;
 import com.tuan.chatserver.mapper.UserMapper;
@@ -14,6 +17,8 @@ import com.tuan.chatserver.repository.AdminRepository;
 import com.tuan.chatserver.repository.ChatBoxRepository;
 import com.tuan.chatserver.repository.MessageRepository;
 import com.tuan.chatserver.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -31,6 +36,8 @@ import java.util.Optional;
  */
 @Service
 public class AdminService {
+    private final Logger logger = LoggerFactory.getLogger(this.getClass());
+
     private final UserRepository userRepository;
     private final AdminRepository adminRepository;
     private final ChatBoxRepository chatBoxRepository;
@@ -66,22 +73,24 @@ public class AdminService {
      *
      * @param username username của tài khoản admin, phải duy nhất
      * @param password mật khẩu dạng plain text, sẽ được mã hóa trước khi lưu
-     * @return {@code true} nếu đăng ký thành công; {@code false} nếu username
-     *         đã tồn tại hoặc xảy ra lỗi khi lưu dữ liệu
+     * @throws UsernameOrEmailAlreadyExistsException nếu username đã tồn tại
+     * @throws DataAccessFailureException nếu xảy ra lỗi khi lưu dữ liệu
      */
-    public boolean registerAdmin(String username, String password) {
+    public void registerAdmin(String username, String password) {
+        logger.info("Attempting to register admin, username={}", username);
         String hashedPassword = bcryptPasswordEncoder.encode(password);
         if(!adminRepository.existsByUsername(username)) {
             Admin admin = new Admin(username, hashedPassword, true);
             try{
                 adminRepository.save(admin);
-                return true;
+                logger.info("Admin registered successfully, username={}", username);
             }catch (Exception e){
-                e.printStackTrace();
-                return false;
+                logger.error("Error occurred while registering admin, username={}", username, e);
+                throw new DataAccessFailureException(e);
             }
         }else{
-            return false;
+            logger.warn("Register admin failed: username already exists, username={}", username);
+            throw new UsernameOrEmailAlreadyExistsException();
         }
     }
 
@@ -93,11 +102,14 @@ public class AdminService {
      *         trả về {@code null} nếu không tồn tại admin với username tương ứng
      */
     public AdminDTO findAdminByUsername(String username) {
+        logger.debug("Fetching admin by username, username={}", username);
         Optional<Admin> admin = adminRepository.findByUsername(username);
         if (admin.isPresent()) {
             AdminDTO adminDTO = AdminMapper.mapAdminToAdminDTO(admin.get());
+            logger.debug("Found admin for username={}", username);
             return adminDTO;
         } else {
+            logger.debug("No admin found for username={}", username);
             return null;
         }
     }
@@ -110,11 +122,14 @@ public class AdminService {
      *         không tồn tại admin với id tương ứng
      */
     public AdminDTO getAdminProfile(Long id){
+        logger.debug("Fetching admin profile, id={}", id);
         Optional<Admin> admin = adminRepository.findById(id);
         if (admin.isPresent()) {
             AdminDTO adminDTO = AdminMapper.mapAdminToAdminDTO(admin.get());
+            logger.debug("Found admin profile for id={}", id);
             return adminDTO;
         } else {
+            logger.debug("No admin found for id={}", id);
             return null;
         }
     }
@@ -128,12 +143,14 @@ public class AdminService {
      *         trả về danh sách rỗng nếu không có người dùng nào
      */
     public List<UserDTO> findAllUsers(){
+        logger.debug("Fetching all users");
         List<User> users = userRepository.findAll();
         List<UserDTO> userDTOS = new ArrayList<>();
         for(User user:users){
             UserDTO userDTO = UserMapper.mapUserToUserDTO(user);
             userDTOS.add(userDTO);
         }
+        logger.debug("Found {} user(s)", userDTOS.size());
         return userDTOS;
     }
 
@@ -146,12 +163,14 @@ public class AdminService {
      *         nếu không có kết quả nào phù hợp
      */
     public List<UserDTO> findUserByUsernameContaining(String keyword){
+        logger.debug("Fetching users by username containing keyword, keyword={}", keyword);
         List<User> users = userRepository.findByUsernameContaining(keyword);
         List<UserDTO> userDTOS = new ArrayList<>();
         for(User user:users){
             UserDTO userDTO = UserMapper.mapUserToUserDTO(user);
             userDTOS.add(userDTO);
         }
+        logger.debug("Found {} user(s) matching keyword={}", userDTOS.size(), keyword);
         return userDTOS;
     }
 
@@ -162,23 +181,25 @@ public class AdminService {
      * (và ngược lại). Đây là chức năng để admin kiểm soát tài khoản người dùng.
      *
      * @param id id của người dùng cần thay đổi trạng thái
-     * @return {@code true} nếu thay đổi và lưu thành công; {@code false} nếu
-     *         người dùng không tồn tại hoặc xảy ra lỗi khi lưu
+     * @throws UserNotFoundException nếu không tìm thấy người dùng với id tương ứng
+     * @throws DataAccessFailureException nếu xảy ra lỗi khi lưu dữ liệu
      */
-    public boolean changeActiveStatusForUser(Long id){
+    public void changeActiveStatusForUser(Long id){
+        logger.info("Attempting to change active status for user, id={}", id);
         Optional<User> user = userRepository.findById(id);
         if (user.isPresent()) {
             User actualUser = user.get();
             actualUser.setActive(!actualUser.isActive());
             try{
                 userRepository.save(actualUser);
-                return true;
+                logger.info("Active status changed successfully, id={}, newStatus={}", id, actualUser.isActive());
             }catch (Exception e){
-                e.printStackTrace();
-                return false;
+                logger.error("Error occurred while changing active status for user, id={}", id, e);
+                throw new DataAccessFailureException(e);
             }
         }else{
-            return false;
+            logger.warn("Change active status failed: user not found, id={}", id);
+            throw new UserNotFoundException(id);
         }
     }
 
@@ -191,12 +212,14 @@ public class AdminService {
      *         trả về danh sách rỗng nếu không có chatbox nào
      */
     public List<ChatBoxDTO> getAllChatBox(){
+        logger.debug("Fetching all chatboxes");
         List<ChatBox> chatBoxes=chatBoxRepository.findAll();
         List<ChatBoxDTO> chatBoxDTOS=new ArrayList<>();
         for(ChatBox chatBox:chatBoxes){
             ChatBoxDTO chatBoxDTO= ChatBoxMapper.mapChatBoxToChatBoxDTO(chatBox);
             chatBoxDTOS.add(chatBoxDTO);
         }
+        logger.debug("Found {} chatbox(es)", chatBoxDTOS.size());
         return chatBoxDTOS;
     }
 
@@ -210,12 +233,14 @@ public class AdminService {
      *         nếu người dùng không tham gia chatbox nào
      */
     public List<ChatBoxDTO> getAllUserChatBox(Long userId){
+        logger.debug("Fetching all chatboxes for userId={}", userId);
         List<ChatBox> chatBoxes=chatBoxRepository.findByUserIdOrderByLastActiveTimeDesc(userId);
         List<ChatBoxDTO> chatBoxDTOS=new ArrayList<>();
         for(ChatBox chatBox:chatBoxes){
             ChatBoxDTO chatBoxDTO= ChatBoxMapper.mapChatBoxToChatBoxDTO(chatBox);
             chatBoxDTOS.add(chatBoxDTO);
         }
+        logger.debug("Found {} chatbox(es) for userId={}", chatBoxDTOS.size(), userId);
         return chatBoxDTOS;
     }
 
@@ -227,7 +252,10 @@ public class AdminService {
      * @return số lượng người dùng (kể cả những tài khoản đã bị vô hiệu hóa)
      */
     public Long countUsers(){
-        return userRepository.count();
+        logger.debug("Counting total users");
+        Long count = userRepository.count();
+        logger.debug("Total users count={}", count);
+        return count;
     }
 
     /**
@@ -237,7 +265,10 @@ public class AdminService {
      * @return số lượng người dùng có trạng thái tương ứng
      */
     public Long countUsersByActiveStatus(Boolean isActive){
-        return userRepository.countByIsActive(isActive);
+        logger.debug("Counting users by active status, isActive={}", isActive);
+        Long count = userRepository.countByIsActive(isActive);
+        logger.debug("Users count for isActive={} is {}", isActive, count);
+        return count;
     }
 
     /**
@@ -246,7 +277,10 @@ public class AdminService {
      * @return số lượng chatbox (kể cả những chatbox không còn hoạt động)
      */
     public Long countChatBoxes(){
-        return chatBoxRepository.count();
+        logger.debug("Counting total chatboxes");
+        Long count = chatBoxRepository.count();
+        logger.debug("Total chatboxes count={}", count);
+        return count;
     }
 
     /**
@@ -257,7 +291,10 @@ public class AdminService {
      * @return số lượng chatbox có {@code lastActiveTime} nằm trong khoảng thời gian đã chỉ định
      */
     public Long countChatBoxesByLastActiveTimeBetween(LocalDateTime startTime, LocalDateTime endTime) {
-        return chatBoxRepository.countByLastActiveTimeBetween(startTime,endTime);
+        logger.debug("Counting chatboxes with lastActiveTime between startTime={} and endTime={}", startTime, endTime);
+        Long count = chatBoxRepository.countByLastActiveTimeBetween(startTime,endTime);
+        logger.debug("Chatboxes count in given time range={}", count);
+        return count;
     }
 
     /**
@@ -266,7 +303,10 @@ public class AdminService {
      * @return số lượng tin nhắn trong tất cả chatbox
      */
     public Long countMessages(){
-        return messageRepository.count();
+        logger.debug("Counting total messages");
+        Long count = messageRepository.count();
+        logger.debug("Total messages count={}", count);
+        return count;
     }
 
     /**
@@ -277,6 +317,9 @@ public class AdminService {
      * @return số lượng tin nhắn có {@code timestamp} nằm trong khoảng thời gian đã chỉ định
      */
     public Long countMessagesByTimestampBetween(LocalDateTime startTime, LocalDateTime endTime) {
-        return messageRepository.countByTimestampBetween(startTime,endTime);
+        logger.debug("Counting messages with timestamp between startTime={} and endTime={}", startTime, endTime);
+        Long count = messageRepository.countByTimestampBetween(startTime,endTime);
+        logger.debug("Messages count in given time range={}", count);
+        return count;
     }
 }
