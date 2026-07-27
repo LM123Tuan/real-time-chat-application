@@ -1,7 +1,6 @@
 package com.tuan.chatserver.entity;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -19,6 +18,9 @@ public class RefreshToken {
     @Column(nullable = false, unique = true)
     private String token;
 
+    @Column(nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
     @Column(nullable = false)
     private LocalDateTime expiryDate;
 
@@ -35,6 +37,12 @@ public class RefreshToken {
     public void setToken(String token){
         this.token=token;
     }
+
+    @PrePersist
+    protected void onCreate() {
+        this.createdAt = LocalDateTime.now();
+    }
+
     public void setExpiryDate(LocalDateTime expiryDate){
         this.expiryDate = expiryDate;
     }

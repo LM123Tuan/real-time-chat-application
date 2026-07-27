@@ -46,7 +46,7 @@ public class AuthService {
         RefreshToken refreshToken = refreshTokenService.findByToken(requestRefreshToken)
                 .orElseThrow(() -> new InvalidRefreshTokenException());
 
-        refreshTokenService.verifyExpiration(refreshToken);
+        refreshTokenService.validateToken(refreshToken);
 
         Person person = refreshToken.getPerson();
         String newAccessToken = jwtService.generateAccessToken(person.getId(), person.getUsername(), person.getRole(), person.getTokenVersion());
@@ -54,13 +54,21 @@ public class AuthService {
         return new RefreshTokenResponse(newAccessToken, refreshToken.getToken());
     }
 
-    public void logout(Authentication authentication){
+    public void logout(Authentication authentication, LogoutRequest logoutRequest){
         CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
         Person person = userDetails.getPerson();
+        String token=logoutRequest.getRefreshToken();
+
+        RefreshToken refreshToken = refreshTokenService.findByToken(token)
+                .orElseThrow(InvalidRefreshTokenException::new);
+
+        if (!refreshToken.getPerson().getId().equals(person.getId())) {
+            throw new InvalidRefreshTokenException();
+        }
 
         person.setTokenVersion(person.getTokenVersion() + 1);
         personRepository.save(person);
 
-        refreshTokenService.logout(person);
+        refreshTokenService.revoke(token);
     }
 }

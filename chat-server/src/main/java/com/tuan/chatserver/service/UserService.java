@@ -5,24 +5,37 @@ import com.tuan.chatserver.entity.User;
 import com.tuan.chatserver.exception.*;
 import com.tuan.chatserver.mapper.UserMapper;
 import com.tuan.chatserver.repository.UserRepository;
+import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 public class UserService {
     private final UserRepository userRepository;
     private final BCryptPasswordEncoder bCryptPasswordEncoder;
+    private final VerificationService verificationService;
+    private final EmailService emailService;
+    private final EmailTemplateService emailTemplateService;
+
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
+    @Value("${app.base-url}")
+    private String baseUrl;
+    private static final String VERIFICATION_URL = "/api/auth/verify?token=";
 
     @Autowired
-    public UserService(UserRepository userRepository, BCryptPasswordEncoder bCryptPasswordEncoder) {
+    public UserService(UserRepository userRepository, BCryptPasswordEncoder bCryptPasswordEncoder, VerificationService verificationService, EmailService emailService, EmailTemplateService emailTemplateService) {
         this.userRepository = userRepository;
         this.bCryptPasswordEncoder = bCryptPasswordEncoder;
+        this.verificationService=verificationService;
+        this.emailService=emailService;
+        this.emailTemplateService=emailTemplateService;
     }
 
     public void register(UserRegisterRequest userRegisterRequest){
@@ -38,13 +51,43 @@ public class UserService {
             throw new UsernameOrEmailAlreadyExistsException();
         }
 
+        Optional<String> oldVerificationToken =
+                verificationService.getTokenByEmail(email);
+
+        oldVerificationToken.ifPresent(token ->
+                verificationService.removeVerification(token, email)
+        );
+
+        String newVerificationToken=UUID.randomUUID().toString();
         String hashedPassword = bCryptPasswordEncoder.encode(password);
-        User user = new User(fullname, username, email, hashedPassword, phone, true);
+        PendingRegistration pendingRegistration=new PendingRegistration(email, username, hashedPassword, fullname, phone);
+
+        verificationService.createVerification(newVerificationToken, pendingRegistration);
+
+        String verificationUrl=baseUrl+VERIFICATION_URL+newVerificationToken;
+
+        String htmlContent=emailTemplateService.buildVerificationEmail(username, verificationUrl);
+        emailService.sendHtmlMail(email, "Verify your Chat Server account", htmlContent);
+    }
+
+    @Transactional
+    public void verifyRegistration(String token){
+        PendingRegistration pendingRegistration=verificationService.getPendingRegistration(token).orElseThrow(() -> {
+            throw new InvalidVerificationTokenException(token);
+        });
+
+        String fullname=pendingRegistration.getFullname();
+        String username=pendingRegistration.getUsername();
+        String email=pendingRegistration.getEmail();
+        String password=pendingRegistration.getHashedPassword();
+        String phone=pendingRegistration.getPhone();
+
+        verificationService.removeVerification(token, email);
+
+        User user=new User(fullname, username, email, password, phone, true);
         try{
             userRepository.save(user);
-            logger.info("Register successful for username: {}", username);
         }catch(Exception e){
-            logger.error("Register failed while saving user: username={}", username, e);
             throw new DataAccessFailureException(e);
         }
     }
