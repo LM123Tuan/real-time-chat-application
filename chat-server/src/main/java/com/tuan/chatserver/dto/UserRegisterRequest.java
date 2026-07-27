@@ -1,15 +1,28 @@
 package com.tuan.chatserver.dto;
 
-public class RegisterRequest {
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+
+public class UserRegisterRequest {
+    @NotBlank(message = "fullname cannot blank!")
     private String fullname;
+    @NotBlank(message = "username cannot blank!")
+    @Pattern(
+            regexp = "^[a-zA-Z0-9_]{5,20}$",
+            message = "Username must contain only letters, numbers, and underscores, and be between 5 and 20 characters long"
+    )
     private String username;
+    @NotBlank(message = "email cannot blank!")
+    @Email(message = "Invalid email format!")
     private String email;
+    @NotBlank(message = "password cannot blank!")
     private String password;
     private String phone;
 
-    public RegisterRequest(){}
+    public UserRegisterRequest(){}
 
-    public RegisterRequest(String fullname, String username, String email, String password, String phone) {
+    public UserRegisterRequest(String fullname, String username, String email, String password, String phone) {
         this.fullname = fullname;
         this.username = username;
         this.email = email;

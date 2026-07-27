@@ -2,6 +2,7 @@ package com.tuan.chatserver.entity;
 
 import com.tuan.chatserver.enums.UserRole;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.Pattern;
 
 import java.util.Objects;
 
@@ -12,6 +13,10 @@ public abstract class Person {
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE)
     private Long id;
+    @Pattern(
+            regexp = "^[a-zA-Z0-9_]{5,20}$",
+            message = "Username must contain only letters, numbers, and underscores, and be between 5 and 20 characters long"
+    )
     @Column(unique = true, nullable = false)
     private String username;
     @Column(nullable = false)
@@ -21,6 +26,8 @@ public abstract class Person {
     private UserRole role;
     @Column(nullable = false)
     private boolean isActive;
+    @Column(nullable = false)
+    private int tokenVersion = 0;
 
     public Person(){}
     public Person(String username, String password, UserRole role, boolean isActive) {
@@ -45,6 +52,9 @@ public abstract class Person {
     public boolean isActive() {
         return this.isActive;
     }
+    public int getTokenVersion(){
+        return this.tokenVersion;
+    }
 
     public void setUsername(String username) {
         this.username = username;
@@ -57,6 +67,9 @@ public abstract class Person {
     }
     public void setActive(boolean isActive) {
         this.isActive = isActive;
+    }
+    public void setTokenVersion(int tokenVersion){
+        this.tokenVersion=tokenVersion;
     }
 
     @Override

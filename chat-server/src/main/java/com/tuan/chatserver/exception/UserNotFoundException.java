@@ -9,4 +9,7 @@ public class UserNotFoundException extends RuntimeException{
     public UserNotFoundException(Set<Long> MissingIds){
         super("Users not found with ids: "+MissingIds);
     }
+    public UserNotFoundException(String usernameOrEmail){
+        super("User not found with username or email: " + usernameOrEmail);
+    }
 }

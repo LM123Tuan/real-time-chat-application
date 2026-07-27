@@ -5,6 +5,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.Table;
+import jakarta.validation.constraints.Email;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -17,6 +18,7 @@ public class User extends Person{
     @Column()
     private String phone;
     @Column(unique = true, nullable = false)
+    @Email(message = "Invalid email format!")
     private String email;
     @ManyToMany(mappedBy = "users")
     private Set<ChatBox> chatBoxes = new HashSet<>();

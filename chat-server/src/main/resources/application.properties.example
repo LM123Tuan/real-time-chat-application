@@ -20,4 +20,8 @@ logging.level.org.hibernate.SQL=DEBUG
 logging.level.org.hibernate.type.descriptor.sql.BasicBinder=TRACE
 logging.level.org.springframework.data.mongodb=DEBUG
 
+jwt.secret=<your-secret-key-min-32-characters>
+jwt.access-token-expiration=<access-token-expiration-in-ms>
+jwt.refresh-token-expiration=<refresh-token-expiration-in-ms>
+
 spring.profiles.active=dev
