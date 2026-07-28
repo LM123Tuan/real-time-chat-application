@@ -23,21 +23,25 @@ public class UserService {
     private final VerificationService verificationService;
     private final EmailService emailService;
     private final EmailTemplateService emailTemplateService;
+    private final ResetPasswordService resetPasswordService;
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
     @Value("${app.base-url}")
     private String baseUrl;
     private static final String VERIFICATION_URL = "/api/auth/verify?token=";
+    private static final String RESET_PASSWORD_URL = "/api/auth/reset-password?token=";
 
     @Autowired
-    public UserService(UserRepository userRepository, BCryptPasswordEncoder bCryptPasswordEncoder, VerificationService verificationService, EmailService emailService, EmailTemplateService emailTemplateService) {
+    public UserService(UserRepository userRepository, BCryptPasswordEncoder bCryptPasswordEncoder, VerificationService verificationService, EmailService emailService, EmailTemplateService emailTemplateService, ResetPasswordService resetPasswordService) {
         this.userRepository = userRepository;
         this.bCryptPasswordEncoder = bCryptPasswordEncoder;
         this.verificationService=verificationService;
         this.emailService=emailService;
         this.emailTemplateService=emailTemplateService;
+        this.resetPasswordService=resetPasswordService;
     }
 
+    @Transactional
     public void register(UserRegisterRequest userRegisterRequest){
         String fullname = userRegisterRequest.getFullname();
         String username = userRegisterRequest.getUsername();
@@ -190,6 +194,54 @@ public class UserService {
             logger.info("Change password successful for userId: {}", id);
         }catch(Exception e){
             logger.error("Change password failed while saving userId: {}", id, e);
+            throw new DataAccessFailureException(e);
+        }
+    }
+
+    @Transactional
+    public void initiateResetPassword(String email){
+        User user=userRepository.findByEmail(email).orElseThrow(() -> {
+            throw new UserNotFoundException(email);
+        });
+        if(!user.isActive()){
+            throw new WrongPasswordOrInactiveAccountException();
+        }
+
+        String username=user.getUsername();
+
+        Optional<String> oldToken=resetPasswordService.getTokenByEmail(email);
+        if(oldToken.isPresent()){
+            resetPasswordService.removeResetPassword(oldToken.get(), email);
+        }
+
+        String newToken=UUID.randomUUID().toString();
+        resetPasswordService.createResetPassword(newToken, email);
+
+        String resetPasswordUrl=baseUrl+RESET_PASSWORD_URL+newToken;
+        String htmlContent=emailTemplateService.buildResetPasswordEmail(username, resetPasswordUrl);
+        emailService.sendHtmlMail(email, "Reset password for your Chat Server account", htmlContent);
+    }
+
+    @Transactional
+    public void confirmResetPassword(String token, ResetPasswordRequest resetPasswordRequest){
+        String email=resetPasswordService.getEmailByToken(token).orElseThrow(() -> {
+            throw new InvalidResetPasswordTokenException(token);
+        });
+        resetPasswordService.removeResetPassword(token, email);
+
+        User user=userRepository.findByEmail(email).orElseThrow(() -> {
+            throw new UserNotFoundException(email);
+        });
+        if(!user.isActive()){
+            throw new WrongPasswordOrInactiveAccountException();
+        }
+
+        String newPassword=resetPasswordRequest.getNewPassword();
+        String password=bCryptPasswordEncoder.encode(newPassword);
+        user.setPassword(password);
+        try{
+            userRepository.save(user);
+        }catch(Exception e){
             throw new DataAccessFailureException(e);
         }
     }
