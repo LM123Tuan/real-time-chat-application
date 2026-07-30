@@ -4,29 +4,52 @@ import com.tuan.chatserver.dto.*;
 import com.tuan.chatserver.entity.Admin;
 import com.tuan.chatserver.entity.Person;
 import com.tuan.chatserver.entity.RefreshToken;
+import com.tuan.chatserver.entity.User;
+import com.tuan.chatserver.enums.AuthProvider;
 import com.tuan.chatserver.enums.UserRole;
-import com.tuan.chatserver.exception.InvalidRefreshTokenException;
+import com.tuan.chatserver.exception.*;
 import com.tuan.chatserver.repository.PersonRepository;
+import com.tuan.chatserver.repository.UserRepository;
 import com.tuan.chatserver.security.CustomUserDetails;
+import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.cache.CacheProperties;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Service;
+
+import java.time.Duration;
+import java.util.Optional;
+import java.util.UUID;
 
 @Service
 public class AuthService {
+    private static final Duration EXCHANGE_TOKEN_TTL = Duration.ofSeconds(30);
+
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
     private final PersonRepository personRepository;
+    private final UserRepository userRepository;
+    private final RedisService redisService;
 
     @Autowired
-    public AuthService(AuthenticationManager authenticationManager, JwtService jwtService, RefreshTokenService refreshTokenService, PersonRepository personRepository){
+    public AuthService(
+            AuthenticationManager authenticationManager,
+            JwtService jwtService,
+            RefreshTokenService refreshTokenService,
+            PersonRepository personRepository,
+            UserRepository userRepository,
+            RedisService redisService
+    ){
         this.authenticationManager=authenticationManager;
         this.jwtService=jwtService;
         this.refreshTokenService=refreshTokenService;
         this.personRepository=personRepository;
+        this.userRepository=userRepository;
+        this.redisService=redisService;
     }
 
     public LoginResponse login(LoginRequest loginRequest){
@@ -39,6 +62,52 @@ public class AuthService {
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(person);
         PersonDTO personDTO=new PersonDTO(person.getId(), person.getUsername(), person.getRole(), person.isActive());
         return new LoginResponse(personDTO, accessToken, refreshToken.getToken());
+    }
+
+    @Transactional
+    public String loginWithGoogle(OidcUser oidcUser){
+        String googleId = oidcUser.getSubject();
+        String email = oidcUser.getEmail();
+        String fullname = oidcUser.getFullName();
+        String username;
+        do {
+            username = "User" + UUID.randomUUID()
+                    .toString()
+                    .replace("-", "")
+                    .substring(0, 8);
+        } while (userRepository.existsByUsername(username));
+        //String avatar = oidcUser.getPicture();
+
+        Optional<User> optionalUser=userRepository.findByProviderAndProviderId(AuthProvider.GOOGLE, googleId);
+        User user;
+        if(optionalUser.isPresent()){
+            user=optionalUser.get();
+        }else{
+            Optional<User> checkUser=userRepository.findByEmail(email);
+            if(checkUser.isPresent()){
+                if (!checkUser.get().getProvider().equals(AuthProvider.GOOGLE)){
+                    throw new UserNotFoundException(email);
+                }
+            }
+            user = new User(fullname, username, email, null, null, true, AuthProvider.GOOGLE, googleId);
+            userRepository.save(user);
+        }
+
+        String accessToken = jwtService.generateAccessToken(user.getId(), user.getUsername(), user.getRole(), user.getTokenVersion());
+        RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
+        PersonDTO personDTO=new PersonDTO(user.getId(), user.getUsername(), user.getRole(), user.isActive());
+        LoginResponse loginResponse = new LoginResponse(personDTO, accessToken, refreshToken.getToken());
+
+        String exchangeToken = UUID.randomUUID().toString();
+        redisService.set("exchange: "+exchangeToken, loginResponse, EXCHANGE_TOKEN_TTL);
+        return exchangeToken;
+    }
+
+    public LoginResponse exchangeToken(String exchangeToken){
+        LoginResponse loginResponse = redisService.getAndDelete("exchange: "+exchangeToken, LoginResponse.class).orElseThrow(() -> {
+            throw new InvalidExchangeTokenException(exchangeToken);
+        });
+        return loginResponse;
     }
 
     public RefreshTokenResponse refreshToken(RefreshTokenRequest refreshTokenRequest){

@@ -1,6 +1,8 @@
 package com.tuan.chatserver.config;
 
 import com.tuan.chatserver.security.JwtAuthenticationFilter;
+import com.tuan.chatserver.security.oauth2.OAuth2AuthenticationFailureHandler;
+import com.tuan.chatserver.security.oauth2.OAuth2AuthenticationSuccessHandler;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,10 +21,16 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableWebSecurity
 public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final OAuth2AuthenticationSuccessHandler oAuth2AuthenticationSuccessHandler;
+    private final OAuth2AuthenticationFailureHandler oAuth2AuthenticationFailureHandler;
 
     @Autowired
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter){
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter
+                        , OAuth2AuthenticationSuccessHandler oAuth2AuthenticationSuccessHandler
+                        , OAuth2AuthenticationFailureHandler oAuth2AuthenticationFailureHandler){
         this.jwtAuthenticationFilter=jwtAuthenticationFilter;
+        this.oAuth2AuthenticationSuccessHandler=oAuth2AuthenticationSuccessHandler;
+        this.oAuth2AuthenticationFailureHandler=oAuth2AuthenticationFailureHandler;
     }
 
     @Bean
@@ -33,9 +41,17 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception{
         http.csrf(AbstractHttpConfigurer::disable)
+                .oauth2Login(oauth -> oauth
+                        .successHandler(oAuth2AuthenticationSuccessHandler)
+                        .failureHandler(oAuth2AuthenticationFailureHandler)
+                )
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers(
+                                "/api/auth/**",
+                                "/oauth2/**",
+                                "/login/oauth2/**"
+                        ).permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

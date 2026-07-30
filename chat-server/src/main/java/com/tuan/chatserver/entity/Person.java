@@ -19,7 +19,7 @@ public abstract class Person {
     )
     @Column(unique = true, nullable = false)
     private String username;
-    @Column(nullable = false)
+    @Column(nullable = true)
     private String password;
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

@@ -1,6 +1,7 @@
 package com.tuan.chatserver.repository;
 
 import com.tuan.chatserver.entity.User;
+import com.tuan.chatserver.enums.AuthProvider;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -17,6 +18,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByUsernameAndIsActiveTrue(String username);
     Optional<User> findByEmailAndIsActiveTrue(String email);
     Optional<User> findByIdAndIsActiveTrue(Long id);
+    Optional<User> findByProviderAndProviderId(AuthProvider provider, String providerId);
+    boolean existsByProviderAndProviderId(AuthProvider provider, String providerId);
     List<User> findByUsernameContaining(String username);
     boolean existsByUsername(String username);
     boolean existsByEmail(String email);

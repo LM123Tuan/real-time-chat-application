@@ -9,4 +9,5 @@ public interface RedisService {
     <T> Optional<T> get(String key, Class<T> type);
     boolean exists(String key);
     void delete(String key);
+    <T> Optional<T> getAndDelete(String key, Class<T> type);
 }

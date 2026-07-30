@@ -1,6 +1,7 @@
 server.port=8888
 server.servlet.context-path=/api
 app.base-url=${APP_BASE_URL}
+app.frontend-url=${APP_FRONTEND_URL}
 
 spring.datasource.url=jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:chat_db}
 spring.datasource.username=${DB_USERNAME:postgres}
@@ -39,5 +40,9 @@ spring.mail.password=your_app_password
 
 spring.mail.properties.mail.smtp.auth=true
 spring.mail.properties.mail.smtp.starttls.enable=true
+
+spring.security.oauth2.client.registration.google.client-id=your-google-client-id
+spring.security.oauth2.client.registration.google.client-secret=your-google-client-secret
+spring.security.oauth2.client.registration.google.scope=openid,email,profile
 
 spring.profiles.active=dev

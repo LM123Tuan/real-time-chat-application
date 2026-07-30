@@ -94,4 +94,24 @@ public class RedisServiceImpl implements RedisService {
 
         logger.info("Successfully deleted Redis key, key={}", key);
     }
+
+    @Override
+    public <T> Optional<T> getAndDelete(String key, Class<T> type) {
+        logger.info("Retrieving and deleting value from Redis, key={}", key);
+
+        try {
+            Object value = redisTemplate.opsForValue().getAndDelete(key);
+
+            if (value == null) {
+                logger.info("No value found in Redis, key={}", key);
+                return Optional.empty();
+            }
+
+            logger.info("Successfully retrieved and deleted Redis value, key={}", key);
+            return Optional.of(type.cast(value));
+        } catch (DataAccessException e) {
+            logger.error("Failed to retrieve and delete Redis value, key={}", key, e);
+            throw new DataAccessFailureException(e);
+        }
+    }
 }
