@@ -8,13 +8,13 @@ import java.util.Set;
 public class ChatBoxDTO {
     private Long id;
     private LocalDateTime createTime;
-    private Set<UserDTO> users;
+    private Set<MyProfileDTO> users;
     private ChatboxType chatboxType;
     private boolean isActive;
     private LocalDateTime lastActiveTime;
 
     public ChatBoxDTO() {}
-    public ChatBoxDTO(Long id, LocalDateTime createTime, Set<UserDTO> users, ChatboxType chatboxType, boolean isActive, LocalDateTime lastActiveTime) {
+    public ChatBoxDTO(Long id, LocalDateTime createTime, Set<MyProfileDTO> users, ChatboxType chatboxType, boolean isActive, LocalDateTime lastActiveTime) {
         this.id = id;
         this.createTime = createTime;
         this.users = users;
@@ -29,7 +29,7 @@ public class ChatBoxDTO {
     public LocalDateTime getCreateTime(){
         return createTime;
     }
-    public Set<UserDTO> getUsers(){
+    public Set<MyProfileDTO> getUsers(){
         return users;
     }
     public ChatboxType getChatboxType(){
@@ -45,7 +45,7 @@ public class ChatBoxDTO {
     public void setCreateTime(LocalDateTime createTime){
         this.createTime = createTime;
     }
-    public void setUsers(Set<UserDTO> users){
+    public void setUsers(Set<MyProfileDTO> users){
         this.users = users;
     }
     public void setChatboxType(ChatboxType chatboxType){

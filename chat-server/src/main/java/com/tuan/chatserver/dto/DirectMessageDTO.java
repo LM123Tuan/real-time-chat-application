@@ -7,7 +7,7 @@ import java.util.Set;
 
 public class DirectMessageDTO extends ChatBoxDTO{
     public DirectMessageDTO() {}
-    public DirectMessageDTO(Long id, LocalDateTime createTime, Set<UserDTO> users, boolean isActive, LocalDateTime lastActiveTime) {
+    public DirectMessageDTO(Long id, LocalDateTime createTime, Set<MyProfileDTO> users, boolean isActive, LocalDateTime lastActiveTime) {
         super(id, createTime, users, ChatboxType.DIRECT_MESSAGE, isActive, lastActiveTime);
     }
 }

@@ -1,7 +1,7 @@
 package com.tuan.chatserver.mapper;
 
 import com.tuan.chatserver.dto.DirectMessageDTO;
-import com.tuan.chatserver.dto.UserDTO;
+import com.tuan.chatserver.dto.MyProfileDTO;
 import com.tuan.chatserver.entity.DirectMessage;
 import com.tuan.chatserver.entity.User;
 
@@ -14,14 +14,14 @@ public class DirectMessageMapper {
         Long directMessageId = directMessage.getId();
         LocalDateTime timestamp = directMessage.getCreateTime();
         Set<User> users=directMessage.getUsers();
-        Set<UserDTO> userDTOS=new HashSet<>();
+        Set<MyProfileDTO> myProfileDTOS =new HashSet<>();
         for(User user:users){
-            UserDTO userProfile= UserMapper.mapUserToUserDTO(user);
-            userDTOS.add(userProfile);
+            MyProfileDTO userProfile= UserMapper.mapUserToUserDTO(user);
+            myProfileDTOS.add(userProfile);
         }
         boolean isActive = directMessage.isActive();
         LocalDateTime lastActiveTime = directMessage.getLastActiveTime();
-        DirectMessageDTO directMessageDTO=new DirectMessageDTO(directMessageId, timestamp, userDTOS, isActive, lastActiveTime);
+        DirectMessageDTO directMessageDTO=new DirectMessageDTO(directMessageId, timestamp, myProfileDTOS, isActive, lastActiveTime);
         return directMessageDTO;
     }
 }

@@ -119,10 +119,38 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
     }
 
-    @ExceptionHandler(RefreshTokenExpiredException.class)
-    public ResponseEntity<ErrorResponse> handleRefreshTokenExpiredException(RefreshTokenExpiredException e){
+    @ExceptionHandler(RefreshTokenExpiredOrNotExistsException.class)
+    public ResponseEntity<ErrorResponse> handleRefreshTokenExpiredException(RefreshTokenExpiredOrNotExistsException e){
         logger.warn("Handled RefreshTokenExpiredException: {}", e.getMessage());
         ErrorResponse errorResponse = new ErrorResponse(e.getMessage(), HttpStatus.UNAUTHORIZED.value(), LocalDateTime.now());
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
+    }
+
+    @ExceptionHandler(InvalidExchangeTokenException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidExchangeTokenException(InvalidExchangeTokenException e){
+        logger.warn("Handled InvalidExchangeTokenException: {}", e.getMessage());
+        ErrorResponse errorResponse = new ErrorResponse(e.getMessage(), HttpStatus.UNAUTHORIZED.value(), LocalDateTime.now());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
+    }
+
+    @ExceptionHandler(InvalidResetPasswordTokenException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidResetPasswordTokenException(InvalidResetPasswordTokenException e){
+        logger.warn("Handled InvalidResetPasswordTokenException: {}", e.getMessage());
+        ErrorResponse errorResponse = new ErrorResponse(e.getMessage(), HttpStatus.UNAUTHORIZED.value(), LocalDateTime.now());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
+    }
+
+    @ExceptionHandler(InvalidVerificationTokenException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidVerificationTokenException(InvalidVerificationTokenException e){
+        logger.warn("Handled InvalidVerificationTokenException: {}", e.getMessage());
+        ErrorResponse errorResponse = new ErrorResponse(e.getMessage(), HttpStatus.UNAUTHORIZED.value(), LocalDateTime.now());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
+    }
+
+    @ExceptionHandler(EmailSendingFailureException.class)
+    public ResponseEntity<ErrorResponse> handleEmailSendingFailureException(EmailSendingFailureException e){
+        logger.error("Handled EmailSendingFailureException: {}", e.getMessage(), e);
+        ErrorResponse errorResponse = new ErrorResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR.value(), LocalDateTime.now());
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
     }
 }

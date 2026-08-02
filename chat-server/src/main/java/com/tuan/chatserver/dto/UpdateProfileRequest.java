@@ -13,8 +13,6 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 public class UpdateProfileRequest {
-    @NotBlank(message = "id cannot blank!")
-    Long id;
     @NotBlank(message = "fullname cannot blank!")
     String fullname;
     @NotBlank(message = "username cannot blank!")

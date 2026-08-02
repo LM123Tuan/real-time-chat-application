@@ -3,7 +3,6 @@ package com.tuan.chatserver.service;
 import com.tuan.chatserver.dto.DirectMessageDTO;
 import com.tuan.chatserver.entity.DirectMessage;
 import com.tuan.chatserver.entity.User;
-import com.tuan.chatserver.exception.ChatBoxNotFoundException;
 import com.tuan.chatserver.exception.DataAccessFailureException;
 import com.tuan.chatserver.exception.UserNotFoundException;
 import com.tuan.chatserver.mapper.DirectMessageMapper;

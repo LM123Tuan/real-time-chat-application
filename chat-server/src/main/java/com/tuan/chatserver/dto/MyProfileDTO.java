@@ -2,15 +2,15 @@ package com.tuan.chatserver.dto;
 
 import com.tuan.chatserver.enums.UserRole;
 
-public class UserDTO extends PersonDTO {
+public class MyProfileDTO extends PersonDTO {
     private String fullname;
     private String phone;
     private String email;
 
-    public UserDTO() {
+    public MyProfileDTO() {
         super();
     }
-    public UserDTO(Long id, String fullname, String username, String email, String phone, boolean isActive) {
+    public MyProfileDTO(Long id, String fullname, String username, String email, String phone, boolean isActive) {
         super(id, username, UserRole.USER, isActive);
         this.fullname = fullname;
         this.phone = phone;

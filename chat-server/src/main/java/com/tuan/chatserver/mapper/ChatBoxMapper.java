@@ -1,7 +1,7 @@
 package com.tuan.chatserver.mapper;
 
 import com.tuan.chatserver.dto.ChatBoxDTO;
-import com.tuan.chatserver.dto.UserDTO;
+import com.tuan.chatserver.dto.MyProfileDTO;
 import com.tuan.chatserver.entity.ChatBox;
 import com.tuan.chatserver.entity.User;
 import com.tuan.chatserver.enums.ChatboxType;
@@ -15,15 +15,15 @@ public class ChatBoxMapper {
         Long chatBoxId = chatBox.getId();
         LocalDateTime timestamp = chatBox.getCreateTime();
         Set<User> users=chatBox.getUsers();
-        Set<UserDTO> userDTOS=new HashSet<>();
+        Set<MyProfileDTO> myProfileDTOS =new HashSet<>();
         for(User user:users){
-            UserDTO userProfile= UserMapper.mapUserToUserDTO(user);
-            userDTOS.add(userProfile);
+            MyProfileDTO userProfile= UserMapper.mapUserToUserDTO(user);
+            myProfileDTOS.add(userProfile);
         }
         ChatboxType chatboxType=chatBox.getChatboxType();
         boolean isActive=chatBox.isActive();
         LocalDateTime lastActiveTime = chatBox.getLastActiveTime();
-        ChatBoxDTO chatBoxDTO=new ChatBoxDTO(chatBoxId, timestamp, userDTOS, chatboxType, isActive, lastActiveTime);
+        ChatBoxDTO chatBoxDTO=new ChatBoxDTO(chatBoxId, timestamp, myProfileDTOS, chatboxType, isActive, lastActiveTime);
         return chatBoxDTO;
     }
 }

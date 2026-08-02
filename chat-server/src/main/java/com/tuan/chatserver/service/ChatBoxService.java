@@ -22,7 +22,7 @@ public class ChatBoxService {
         this.chatBoxRepository = chatBoxRepository;
     }
 
-    public List<ChatBoxDTO> getAllChatboxForUser(Long userId) {
+    public List<ChatBoxDTO> getAllChatboxesForUser(Long userId) {
         logger.debug("Fetching active chatboxes for userId: {}", userId);
         List<ChatBox> chatBoxes = chatBoxRepository.findByUserIdAndIsActiveTrueOrderByLastActiveTimeDesc(userId);
         List<ChatBoxDTO> chatBoxDTOS = new ArrayList<>();

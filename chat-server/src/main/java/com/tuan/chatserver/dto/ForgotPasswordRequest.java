@@ -1,5 +1,6 @@
 package com.tuan.chatserver.dto;
 
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -10,9 +11,8 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class ChangePasswordRequest {
-    @NotBlank(message = "oldPassword cannot blank!")
-    private String oldPassword;
-    @NotBlank(message = "newPassword cannot blank!")
-    private String newPassword;
+public class ForgotPasswordRequest {
+    @Email
+    @NotBlank(message = "email cannot blank!")
+    private String email;
 }

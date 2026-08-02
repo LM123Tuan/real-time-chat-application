@@ -4,7 +4,7 @@ package com.tuan.chatserver.service;
 import com.tuan.chatserver.dto.AdminDTO;
 import com.tuan.chatserver.dto.AdminRegisterRequest;
 import com.tuan.chatserver.dto.ChatBoxDTO;
-import com.tuan.chatserver.dto.UserDTO;
+import com.tuan.chatserver.dto.MyProfileDTO;
 import com.tuan.chatserver.entity.Admin;
 import com.tuan.chatserver.entity.ChatBox;
 import com.tuan.chatserver.entity.User;
@@ -111,28 +111,28 @@ public class AdminService {
 
     //USER
 
-    public List<UserDTO> findAllUsers(){
+    public List<MyProfileDTO> findAllUsers(){
         logger.debug("Fetching all users");
         List<User> users = userRepository.findAll();
-        List<UserDTO> userDTOS = new ArrayList<>();
+        List<MyProfileDTO> myProfileDTOS = new ArrayList<>();
         for(User user:users){
-            UserDTO userDTO = UserMapper.mapUserToUserDTO(user);
-            userDTOS.add(userDTO);
+            MyProfileDTO myProfileDTO = UserMapper.mapUserToUserDTO(user);
+            myProfileDTOS.add(myProfileDTO);
         }
-        logger.debug("Found {} user(s)", userDTOS.size());
-        return userDTOS;
+        logger.debug("Found {} user(s)", myProfileDTOS.size());
+        return myProfileDTOS;
     }
 
-    public List<UserDTO> findUserByUsernameContaining(String keyword){
+    public List<MyProfileDTO> findUserByUsernameContaining(String keyword){
         logger.debug("Fetching users by username containing keyword, keyword={}", keyword);
         List<User> users = userRepository.findByUsernameContaining(keyword);
-        List<UserDTO> userDTOS = new ArrayList<>();
+        List<MyProfileDTO> myProfileDTOS = new ArrayList<>();
         for(User user:users){
-            UserDTO userDTO = UserMapper.mapUserToUserDTO(user);
-            userDTOS.add(userDTO);
+            MyProfileDTO myProfileDTO = UserMapper.mapUserToUserDTO(user);
+            myProfileDTOS.add(myProfileDTO);
         }
-        logger.debug("Found {} user(s) matching keyword={}", userDTOS.size(), keyword);
-        return userDTOS;
+        logger.debug("Found {} user(s) matching keyword={}", myProfileDTOS.size(), keyword);
+        return myProfileDTOS;
     }
 
     public void changeActiveStatusForUser(Long id){

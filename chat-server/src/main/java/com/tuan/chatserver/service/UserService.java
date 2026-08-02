@@ -1,13 +1,16 @@
 package com.tuan.chatserver.service;
 
 import com.tuan.chatserver.dto.*;
+import com.tuan.chatserver.entity.Person;
 import com.tuan.chatserver.entity.User;
 import com.tuan.chatserver.exception.*;
 import com.tuan.chatserver.mapper.UserMapper;
 import com.tuan.chatserver.repository.UserRepository;
+import com.tuan.chatserver.security.CustomUserDetails;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
@@ -18,27 +21,34 @@ import java.util.UUID;
 
 @Service
 public class UserService {
+    private final AuthService authService;
     private final UserRepository userRepository;
     private final BCryptPasswordEncoder bCryptPasswordEncoder;
     private final VerificationService verificationService;
     private final EmailService emailService;
     private final EmailTemplateService emailTemplateService;
-    private final ResetPasswordService resetPasswordService;
+    private final RefreshTokenService refreshTokenService;
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
     @Value("${app.base-url}")
     private String baseUrl;
     private static final String VERIFICATION_URL = "/api/auth/verify?token=";
-    private static final String RESET_PASSWORD_URL = "/api/auth/reset-password?token=";
 
     @Autowired
-    public UserService(UserRepository userRepository, BCryptPasswordEncoder bCryptPasswordEncoder, VerificationService verificationService, EmailService emailService, EmailTemplateService emailTemplateService, ResetPasswordService resetPasswordService) {
+    public UserService(UserRepository userRepository,
+                       BCryptPasswordEncoder bCryptPasswordEncoder,
+                       VerificationService verificationService,
+                       EmailService emailService,
+                       EmailTemplateService emailTemplateService,
+                       AuthService authService,
+                       RefreshTokenService refreshTokenService) {
         this.userRepository = userRepository;
         this.bCryptPasswordEncoder = bCryptPasswordEncoder;
         this.verificationService=verificationService;
         this.emailService=emailService;
         this.emailTemplateService=emailTemplateService;
-        this.resetPasswordService=resetPasswordService;
+        this.authService=authService;
+        this.refreshTokenService=refreshTokenService;
     }
 
     @Transactional
@@ -96,15 +106,29 @@ public class UserService {
         }
     }
 
-    public void deleteAccount(Long id){
+    @Transactional
+    public void deleteAccount(Authentication authentication, String password){
+        CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+        Person person = userDetails.getPerson();
+        Long id=person.getId();
+
         logger.info("Delete account attempt for userId: {}", id);
+
+        User actualUser = userRepository.findById(id)
+                .orElseThrow(() -> new UserNotFoundException(id));
+        if (!bCryptPasswordEncoder.matches(password, actualUser.getPassword())) {
+            throw new WrongPasswordOrInactiveAccountException();
+        }
+
+        refreshTokenService.findTokenByPersonId(id)
+                .ifPresent(refreshTokenService::revoke);
+
         Optional<User> user = userRepository.findById(id);
         if(user.isEmpty()){
             logger.warn("Delete account failed - userId not found: {}", id);
             throw new UserNotFoundException(id);
         }
 
-        User actualUser = user.get();
         actualUser.setActive(false);
         try{
             userRepository.save(actualUser);
@@ -115,7 +139,7 @@ public class UserService {
         }
     }
 
-    public UserDTO getProfile(Long id){
+    public MyProfileDTO getProfile(Long id){
         logger.debug("Fetching profile for userId: {}", id);
         Optional<User> user = userRepository.findById(id);
         if(user.isPresent()){
@@ -126,8 +150,7 @@ public class UserService {
         }
     }
 
-    public void updateProfile(UpdateProfileRequest updateProfileRequest){
-        Long id = updateProfileRequest.getId();
+    public void updateProfile(Long id, UpdateProfileRequest updateProfileRequest){
         String fullname = updateProfileRequest.getFullname();
         String username = updateProfileRequest.getUsername();
         String email = updateProfileRequest.getEmail();
@@ -166,8 +189,7 @@ public class UserService {
         }
     }
 
-    public void changePassword(ChangePasswordRequest changePasswordRequest){
-        Long id = changePasswordRequest.getId();
+    public void changePassword(Long id, ChangePasswordRequest changePasswordRequest){
         String oldPassword = changePasswordRequest.getOldPassword();
         String newPassword = changePasswordRequest.getNewPassword();
         logger.info("Change password attempt for userId: {}", id);
@@ -198,84 +220,33 @@ public class UserService {
         }
     }
 
-    @Transactional
-    public void initiateResetPassword(String email){
-        User user=userRepository.findByEmail(email).orElseThrow(() -> {
-            throw new UserNotFoundException(email);
-        });
-        if(!user.isActive()){
-            throw new WrongPasswordOrInactiveAccountException();
-        }
-
-        String username=user.getUsername();
-
-        Optional<String> oldToken=resetPasswordService.getTokenByEmail(email);
-        if(oldToken.isPresent()){
-            resetPasswordService.removeResetPassword(oldToken.get(), email);
-        }
-
-        String newToken=UUID.randomUUID().toString();
-        resetPasswordService.createResetPassword(newToken, email);
-
-        String resetPasswordUrl=baseUrl+RESET_PASSWORD_URL+newToken;
-        String htmlContent=emailTemplateService.buildResetPasswordEmail(username, resetPasswordUrl);
-        emailService.sendHtmlMail(email, "Reset password for your Chat Server account", htmlContent);
-    }
-
-    @Transactional
-    public void confirmResetPassword(String token, ResetPasswordRequest resetPasswordRequest){
-        String email=resetPasswordService.getEmailByToken(token).orElseThrow(() -> {
-            throw new InvalidResetPasswordTokenException(token);
-        });
-        resetPasswordService.removeResetPassword(token, email);
-
-        User user=userRepository.findByEmail(email).orElseThrow(() -> {
-            throw new UserNotFoundException(email);
-        });
-        if(!user.isActive()){
-            throw new WrongPasswordOrInactiveAccountException();
-        }
-
-        String newPassword=resetPasswordRequest.getNewPassword();
-        String password=bCryptPasswordEncoder.encode(newPassword);
-        user.setPassword(password);
-        try{
-            userRepository.save(user);
-        }catch(Exception e){
-            throw new DataAccessFailureException(e);
-        }
-    }
-
-    public UserDTO findActiveUserByUsername(String username){
+    private OtherProfileDTO findActiveUserByUsername(String username){
         logger.debug("Searching active user by exact username: {}", username);
-        Optional<User> user = userRepository.findByUsernameAndIsActiveTrue(username);
-        if(user.isPresent()){
-            return UserMapper.mapUserToUserDTO(user.get());
-        }else{
-            logger.warn("Search failed - no active user found for username: {}", username);
-            throw new UserNotFoundException(username);
-        }
+
+        User user = userRepository.findByUsernameAndIsActiveTrue(username)
+                .orElseThrow(() -> {
+                    logger.warn("Search failed - no active user found for username: {}", username);
+                    return new UserNotFoundException(username);
+                });
+
+        return UserMapper.mapUserToOtherUserDTO(user);
     }
 
-    public UserDTO findActiveUserByEmail(String email){
+    private OtherProfileDTO findActiveUserByEmail(String email){
         logger.debug("Searching active user by exact email: {}", email);
-        Optional<User> user = userRepository.findByEmailAndIsActiveTrue(email);
-        if(user.isPresent()){
-            return UserMapper.mapUserToUserDTO(user.get());
-        }else{
-            logger.warn("Search failed - no active user found for email: {}", email);
-            throw new UserNotFoundException(email);
-        }
+
+        User user = userRepository.findByUsernameAndIsActiveTrue(email)
+                .orElseThrow(() -> {
+                    logger.warn("Search failed - no active user found for email: {}", email);
+                    return new UserNotFoundException(email);
+                });
+
+        return UserMapper.mapUserToOtherUserDTO(user);
     }
 
-    public UserDTO findActiveUserById(Long id){
-        logger.debug("Searching active user by exact id: {}", id);
-        Optional<User> user = userRepository.findByIdAndIsActiveTrue(id);
-        if(user.isPresent()){
-            return UserMapper.mapUserToUserDTO(user.get());
-        }else{
-            logger.warn("Search failed - no active user found for id: {}", id);
-            throw new UserNotFoundException(id);
-        }
+    public OtherProfileDTO findActiveUserByUsernameOrEmail(String identifier){
+        return identifier.contains("@")
+                ? findActiveUserByEmail(identifier)
+                : findActiveUserByUsername(identifier);
     }
 }

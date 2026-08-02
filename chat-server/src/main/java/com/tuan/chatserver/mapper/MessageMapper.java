@@ -3,7 +3,7 @@ package com.tuan.chatserver.mapper;
 import com.tuan.chatserver.document.Message;
 import com.tuan.chatserver.dto.ChatBoxDTO;
 import com.tuan.chatserver.dto.MessageDTO;
-import com.tuan.chatserver.dto.UserDTO;
+import com.tuan.chatserver.dto.MyProfileDTO;
 import com.tuan.chatserver.entity.ChatBox;
 import com.tuan.chatserver.entity.User;
 import com.tuan.chatserver.enums.MessageStatus;
@@ -24,7 +24,7 @@ public class MessageMapper {
         this.chatBoxRepository=chatBoxRepository;
     }
     public MessageDTO mapMessageToMessageDTO(Message message) {
-        UserDTO senderDTO=new UserDTO();
+        MyProfileDTO senderDTO=new MyProfileDTO();
         ChatBoxDTO chatBoxDTO=new ChatBoxDTO();
         String id=message.getId();
         Long senderId=message.getSenderId();
