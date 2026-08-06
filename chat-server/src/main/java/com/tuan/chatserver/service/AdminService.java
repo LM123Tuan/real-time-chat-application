@@ -1,10 +1,7 @@
 //TODO: Add some features
 package com.tuan.chatserver.service;
 
-import com.tuan.chatserver.dto.AdminDTO;
-import com.tuan.chatserver.dto.AdminRegisterRequest;
-import com.tuan.chatserver.dto.ChatBoxDTO;
-import com.tuan.chatserver.dto.MyProfileDTO;
+import com.tuan.chatserver.dto.*;
 import com.tuan.chatserver.entity.Admin;
 import com.tuan.chatserver.entity.ChatBox;
 import com.tuan.chatserver.entity.User;
@@ -123,30 +120,30 @@ public class AdminService {
 
     //USER
 
-    public List<MyProfileDTO> findAllUsers(Long requesterId){
+    public List<OtherProfileDTO> findAllUsers(Long requesterId){
         validateAdminAccess(requesterId);
         logger.debug("Fetching all users");
         List<User> users = userRepository.findAll();
-        List<MyProfileDTO> myProfileDTOS = new ArrayList<>();
+        List<OtherProfileDTO> profileDTOS = new ArrayList<>();
         for(User user:users){
-            MyProfileDTO myProfileDTO = UserMapper.mapUserToUserDTO(user);
-            myProfileDTOS.add(myProfileDTO);
+            OtherProfileDTO profileDTO = UserMapper.mapUserToOtherUserDTO(user);
+            profileDTOS.add(profileDTO);
         }
-        logger.debug("Found {} user(s)", myProfileDTOS.size());
-        return myProfileDTOS;
+        logger.debug("Found {} user(s)", profileDTOS.size());
+        return profileDTOS;
     }
 
-    public List<MyProfileDTO> findUserByUsernameContaining(Long requesterId, String keyword){
+    public List<OtherProfileDTO> findUserByUsernameContaining(Long requesterId, String keyword){
         validateAdminAccess(requesterId);
         logger.debug("Fetching users by username containing keyword, keyword={}", keyword);
         List<User> users = userRepository.findByUsernameContaining(keyword);
-        List<MyProfileDTO> myProfileDTOS = new ArrayList<>();
+        List<OtherProfileDTO> profileDTOS = new ArrayList<>();
         for(User user:users){
-            MyProfileDTO myProfileDTO = UserMapper.mapUserToUserDTO(user);
-            myProfileDTOS.add(myProfileDTO);
+            OtherProfileDTO profileDTO = UserMapper.mapUserToOtherUserDTO(user);
+            profileDTOS.add(profileDTO);
         }
-        logger.debug("Found {} user(s) matching keyword={}", myProfileDTOS.size(), keyword);
-        return myProfileDTOS;
+        logger.debug("Found {} user(s) matching keyword={}", profileDTOS.size(), keyword);
+        return profileDTOS;
     }
 
     public void changeActiveStatusForUser(Long requesterId, Long id){

@@ -1,9 +1,6 @@
 package com.tuan.chatserver.controller;
 
-import com.tuan.chatserver.dto.AdminDTO;
-import com.tuan.chatserver.dto.AdminRegisterRequest;
-import com.tuan.chatserver.dto.ChatBoxDTO;
-import com.tuan.chatserver.dto.MyProfileDTO;
+import com.tuan.chatserver.dto.*;
 import com.tuan.chatserver.security.CustomUserDetails;
 import com.tuan.chatserver.service.AdminService;
 import jakarta.validation.Valid;
@@ -60,9 +57,9 @@ public class AdminController {
     //USER
 
     @GetMapping("/users")
-    public ResponseEntity<List<MyProfileDTO>> findAllUsers(Authentication authentication, @RequestParam(required = false) String keyword) {
+    public ResponseEntity<List<OtherProfileDTO>> findAllUsers(Authentication authentication, @RequestParam(required = false) String keyword) {
         Long requesterId = extractRequesterId(authentication);
-        List<MyProfileDTO> users = (keyword == null || keyword.isBlank())
+        List<OtherProfileDTO> users = (keyword == null || keyword.isBlank())
                 ? adminService.findAllUsers(requesterId)
                 : adminService.findUserByUsernameContaining(requesterId, keyword);
         return ResponseEntity.ok(users);
