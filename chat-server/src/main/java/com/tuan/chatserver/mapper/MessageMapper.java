@@ -3,7 +3,7 @@ package com.tuan.chatserver.mapper;
 import com.tuan.chatserver.document.Message;
 import com.tuan.chatserver.dto.ChatBoxDTO;
 import com.tuan.chatserver.dto.MessageDTO;
-import com.tuan.chatserver.dto.MyProfileDTO;
+import com.tuan.chatserver.dto.UserSummaryDTO;
 import com.tuan.chatserver.entity.ChatBox;
 import com.tuan.chatserver.entity.User;
 import com.tuan.chatserver.enums.MessageStatus;
@@ -24,14 +24,14 @@ public class MessageMapper {
         this.chatBoxRepository=chatBoxRepository;
     }
     public MessageDTO mapMessageToMessageDTO(Message message) {
-        MyProfileDTO senderDTO=new MyProfileDTO();
-        ChatBoxDTO chatBoxDTO=new ChatBoxDTO();
+        UserSummaryDTO senderDTO;
+        ChatBoxDTO chatBoxDTO;
         String id=message.getId();
         Long senderId=message.getSenderId();
         Optional<User> sender=userRepository.findById(senderId);
         if(sender.isPresent()){
             User actualSender=sender.get();
-            senderDTO = UserMapper.mapUserToUserDTO(actualSender);
+            senderDTO = UserMapper.mapUserToUserSummaryDTO(actualSender);
         }else{
             return null;
         }

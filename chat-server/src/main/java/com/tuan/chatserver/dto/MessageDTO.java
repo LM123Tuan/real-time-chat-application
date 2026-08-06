@@ -6,7 +6,7 @@ import java.time.LocalDateTime;
 
 public class MessageDTO {
     private String id;
-    private MyProfileDTO sender;
+    private UserSummaryDTO sender;
     private ChatBoxDTO chatBox;
     private LocalDateTime timestamp;
     private boolean viewable;
@@ -14,7 +14,7 @@ public class MessageDTO {
     private String content;
 
     public MessageDTO() {}
-    public MessageDTO(String id, MyProfileDTO sender, ChatBoxDTO chatBox, LocalDateTime timestamp, boolean viewable, MessageStatus status, String content) {
+    public MessageDTO(String id, UserSummaryDTO sender, ChatBoxDTO chatBox, LocalDateTime timestamp, boolean viewable, MessageStatus status, String content) {
         this.id= id;
         this.sender = sender;
         this.chatBox = chatBox;
@@ -27,7 +27,7 @@ public class MessageDTO {
     public String getId() {
         return id;
     }
-    public MyProfileDTO getSender() {
+    public UserSummaryDTO getSender() {
         return sender;
     }
     public ChatBoxDTO getChatBox() {
@@ -46,7 +46,7 @@ public class MessageDTO {
         return content;
     }
 
-    public void setSender(MyProfileDTO sender) {
+    public void setSender(UserSummaryDTO sender) {
         this.sender = sender;
     }
     public void setChatBox(ChatBoxDTO chatBox) {

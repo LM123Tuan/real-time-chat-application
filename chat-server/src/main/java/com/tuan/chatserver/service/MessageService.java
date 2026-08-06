@@ -2,6 +2,7 @@ package com.tuan.chatserver.service;
 
 import com.tuan.chatserver.document.Message;
 import com.tuan.chatserver.dto.MessageDTO;
+import com.tuan.chatserver.dto.SearchMessageRequest;
 import com.tuan.chatserver.entity.ChatBox;
 import com.tuan.chatserver.entity.User;
 import com.tuan.chatserver.enums.MessageStatus;
@@ -41,80 +42,85 @@ public class MessageService {
         this.messageMapper = messageMapper;
     }
 
-    public List<MessageDTO> findByChatBoxIdOrderByTimestampDesc(Long chatBoxId) {
-        logger.debug("Fetching messages ordered by timestamp desc, chatBoxId={}", chatBoxId);
-        List<Message> messages = messageRepository.findByChatBoxIdOrderByTimestampDesc(chatBoxId);
-        List<MessageDTO> messageDTOs = new ArrayList<>();
-        for (Message message : messages) {
-            MessageDTO messageDTO = messageMapper.mapMessageToMessageDTO(message);
-            messageDTOs.add(messageDTO);
+    @Transactional(readOnly = true)
+    public List<MessageDTO> findMessages(Long requesterId, Long chatBoxId, SearchMessageRequest request) {
+        ChatBox chatBox = chatBoxRepository.findById(chatBoxId).orElseThrow(() -> {
+            logger.warn("Validation failed: chatbox not found, chatBoxId={}", chatBoxId);
+            return new ChatBoxNotFoundException(chatBoxId);
+        });
+        User requester = userRepository.findById(requesterId).orElseThrow(() -> {
+            logger.warn("Validation failed: user not found, userId={}", requesterId);
+            return new UserNotFoundException(requesterId);
+        });
+        Long senderId = request.getSenderId();
+
+        if(!chatBox.getUsers().contains(requester)){
+            throw new UserNotInChatBoxException(chatBoxId, requesterId);
         }
-        logger.debug("Found {} message(s) for chatBoxId={}", messageDTOs.size(), chatBoxId);
+
+        LocalDateTime startTime = request.getStartTime();
+        if(request.getStartTime() == null){
+            startTime = chatBox.getCreateTime();
+        }
+
+        LocalDateTime endTime = request.getEndTime();
+        if(request.getEndTime() == null){
+            endTime = chatBox.getLastActiveTime();
+        }
+
+        logger.debug("Resolving message query, chatBoxId={}, senderId={}, startTime={}, endTime={}", chatBoxId, senderId, request.getStartTime(), request.getEndTime());
+
+        List<Message> messages;
+        if (request.getSenderId() != null) {
+            User sender = userRepository.findById(senderId).orElseThrow(() -> {
+                logger.warn("Validation failed: user not found, userId={}", senderId);
+                return new UserNotFoundException(senderId);
+            });
+
+            if(!chatBox.getUsers().contains(sender)){
+                throw new UserNotInChatBoxException(chatBoxId, senderId);
+            }
+
+            messages = messageRepository.findBySenderIdAndChatBoxIdAndTimestampBetweenOrderByTimestampDesc(
+                    senderId, chatBoxId, startTime, endTime);
+        }else {
+            messages = messageRepository.findByChatBoxIdAndTimestampBetweenOrderByTimestampDesc(chatBoxId, startTime, endTime);
+        }
+
+        List<MessageDTO> messageDTOs = mapToDTOList(messages);
+        logger.debug("Found {} message(s) for chatBoxId={}, senderId={}, startTime={}, endTime={}", messageDTOs.size(), chatBoxId, senderId, request.getStartTime(), request.getEndTime());
         return messageDTOs;
     }
 
-    public List<MessageDTO> findBySenderIdAndChatBoxIdOrderByTimestampDesc(Long senderId, Long chatBoxId) {
-        logger.debug("Fetching messages by senderId={} and chatBoxId={}, ordered by timestamp desc", senderId, chatBoxId);
-        List<Message> messages = messageRepository.findBySenderIdAndChatBoxIdOrderByTimestampDesc(senderId, chatBoxId);
+    private List<MessageDTO> mapToDTOList(List<Message> messages) {
         List<MessageDTO> messageDTOs = new ArrayList<>();
         for (Message message : messages) {
-            MessageDTO messageDTO = messageMapper.mapMessageToMessageDTO(message);
-            messageDTOs.add(messageDTO);
+            messageDTOs.add(messageMapper.mapMessageToMessageDTO(message));
         }
-        logger.debug("Found {} message(s) for senderId={}, chatBoxId={}", messageDTOs.size(), senderId, chatBoxId);
-        return messageDTOs;
-    }
-
-    public List<MessageDTO> findByChatBoxIdAndTimestampBetweenOrderByTimestampDesc(Long chatBoxId, LocalDateTime startTime, LocalDateTime endTime){
-        logger.debug("Fetching messages for chatBoxId={} between startTime={} and endTime={}", chatBoxId, startTime, endTime);
-        List<Message> messages = messageRepository.findByChatBoxIdAndTimestampBetweenOrderByTimestampDesc(chatBoxId,startTime,endTime);
-        List<MessageDTO> messageDTOs = new ArrayList<>();
-        for (Message message : messages) {
-            MessageDTO messageDTO = messageMapper.mapMessageToMessageDTO(message);
-            messageDTOs.add(messageDTO);
-        }
-        logger.debug("Found {} message(s) for chatBoxId={} in given time range", messageDTOs.size(), chatBoxId);
-        return messageDTOs;
-    }
-
-    public List<MessageDTO> findBySenderIdAndChatBoxIdAndTimestampBetweenOrderByTimestampDesc(Long senderId, Long chatBoxId, LocalDateTime startTime, LocalDateTime endTime){
-        logger.debug("Fetching messages by senderId={} for chatBoxId={} between startTime={} and endTime={}", senderId, chatBoxId, startTime, endTime);
-        List<Message> messages = messageRepository.findBySenderIdAndChatBoxIdAndTimestampBetweenOrderByTimestampDesc(senderId,chatBoxId,startTime,endTime);
-        List<MessageDTO> messageDTOs = new ArrayList<>();
-        for (Message message : messages) {
-            MessageDTO messageDTO = messageMapper.mapMessageToMessageDTO(message);
-            messageDTOs.add(messageDTO);
-        }
-        logger.debug("Found {} message(s) for senderId={}, chatBoxId={} in given time range", messageDTOs.size(), senderId, chatBoxId);
         return messageDTOs;
     }
 
     @Transactional
-    public void sendMessage(Long senderId, Long chatBoxId, String content){
+    public MessageDTO sendMessage(Long senderId, Long chatBoxId, String content){
         logger.info("Attempting to send message, senderId={}, chatBoxId={}", senderId, chatBoxId);
-        ChatBox chatBox= chatBoxRepository.findById(chatBoxId).orElseThrow(() -> {
+        validateUserInChatBox(senderId, chatBoxId);
+
+        if(content.isEmpty()){
+            logger.warn("Send message failed: content is empty, senderId={}, chatBoxId={}", senderId, chatBoxId);
+            throw new EmptyMessageContentException();
+        }
+
+        ChatBox chatBox = chatBoxRepository.findById(chatBoxId).orElseThrow(() -> {
             logger.warn("Send message failed: chatbox not found, chatBoxId={}", chatBoxId);
             return new ChatBoxNotFoundException(chatBoxId);
         });
-        User sender=userRepository.findById(senderId).orElseThrow(() -> {
-            logger.warn("Send message failed: sender not found, senderId={}", senderId);
-            return new UserNotFoundException(senderId);
-        });
-        if(chatBox.getUsers().contains(sender)){
-            if(!content.isEmpty()){
-                chatBox.setLastActiveTime(LocalDateTime.now());
-                chatBoxRepository.save(chatBox);
-                Message message=new Message(senderId, chatBoxId, LocalDateTime.now(), true, MessageStatus.SENT, content);
-                messageRepository.save(message);
-                logger.info("Message sent successfully, senderId={}, chatBoxId={}", senderId, chatBoxId);
-            }else{
-                logger.warn("Send message failed: content is empty, senderId={}, chatBoxId={}", senderId, chatBoxId);
-                throw new EmptyMessageContentException();
-            }
-        }else{
-            logger.warn("Send message failed: sender is not a member of chatbox, senderId={}, chatBoxId={}", senderId, chatBoxId);
-            throw new UserNotInChatBoxException(chatBoxId, senderId);
-        }
+        chatBox.setLastActiveTime(LocalDateTime.now());
+        chatBoxRepository.save(chatBox);
+        Message message = new Message(senderId, chatBoxId, LocalDateTime.now(), true, MessageStatus.SENT, content);
+        messageRepository.save(message);
+        logger.info("Message sent successfully, senderId={}, chatBoxId={}", senderId, chatBoxId);
+        MessageDTO dto = messageMapper.mapMessageToMessageDTO(message);
+        return dto;
     }
 
     public void updateMessageStatus(String messageId){
@@ -145,11 +151,16 @@ public class MessageService {
         }
     }
 
-    public void recallMessage(String messageId){
-        logger.info("Attempting to recall message, messageId={}", messageId);
+    public void recallMessage(Long requesterId, String messageId){
+        logger.info("Attempting to recall message, requesterId={}, messageId={}", requesterId, messageId);
         Optional<Message> message=messageRepository.findById(messageId);
         if(message.isPresent()){
             Message actualMessage=message.get();
+            validateUserInChatBox(requesterId, actualMessage.getChatBoxId());
+
+            if(!actualMessage.getSenderId().equals(requesterId)){
+                throw new UserIsNotMessageSenderException(requesterId, messageId);
+            }
             boolean messageViewable=actualMessage.isViewable();
             if(messageViewable){
                 actualMessage.setViewable(false);
@@ -168,5 +179,30 @@ public class MessageService {
             logger.warn("Recall message failed: message not found, messageId={}", messageId);
             throw new MessageNotExistsException(messageId);
         }
+    }
+
+    private void validateUserInChatBox(Long userId, Long chatBoxId) {
+        ChatBox chatBox = chatBoxRepository.findById(chatBoxId).orElseThrow(() -> {
+            logger.warn("Validation failed: chatbox not found, chatBoxId={}", chatBoxId);
+            return new ChatBoxNotFoundException(chatBoxId);
+        });
+        User user = userRepository.findById(userId).orElseThrow(() -> {
+            logger.warn("Validation failed: user not found, userId={}", userId);
+            return new UserNotFoundException(userId);
+        });
+        if (!chatBox.getUsers().contains(user)) {
+            logger.warn("Validation failed: user is not a member of chatbox, userId={}, chatBoxId={}", userId, chatBoxId);
+            throw new UserNotInChatBoxException(chatBoxId, userId);
+        }
+    }
+
+    public List<MessageDTO> loadAllMessagesForChatBox(Long userId, Long chatBoxId){
+        validateUserInChatBox(userId, chatBoxId);
+
+        List<Message> messages = messageRepository.findByChatBoxIdOrderByTimestampDesc(chatBoxId);
+
+        List<MessageDTO> dtos = mapToDTOList(messages);
+
+        return dtos;
     }
 }

@@ -9,8 +9,6 @@ import java.util.Set;
 @Entity
 @Table(name = "group_chat")
 public class GroupChat extends ChatBox{
-    @Column(name = "name", nullable = false)
-    private String name;
     @ManyToMany
     @JoinTable(
             name = "chat_box_leaders",
@@ -27,15 +25,11 @@ public class GroupChat extends ChatBox{
     private Set<User> viceLeaders;
     public GroupChat() {}
     public GroupChat(LocalDateTime createTime, Set<User> users, Set<User> leaders, Set<User> viceLeaders, String name, boolean isActive, LocalDateTime lastActiveTime) {
-        super(createTime, users, ChatboxType.GROUP_CHAT, isActive, lastActiveTime);
-        this.name = name;
+        super(name, createTime, users, ChatboxType.GROUP_CHAT, isActive, lastActiveTime);
         this.viceLeaders = viceLeaders;
         this.leaders = leaders;
     }
 
-    public String getName() {
-        return name;
-    }
     public Set<User> getLeaders() {
         return leaders;
     }
@@ -43,9 +37,6 @@ public class GroupChat extends ChatBox{
         return viceLeaders;
     }
 
-    public void setName(String name) {
-        this.name = name;
-    }
     public void setLeaders(Set<User> leaders) {
         this.leaders = leaders;
     }

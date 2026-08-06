@@ -6,34 +6,26 @@ import java.time.LocalDateTime;
 import java.util.Set;
 
 public class GroupChatDTO extends ChatBoxDTO{
-    private String name;
-    private Set<MyProfileDTO> leaders;
-    private Set<MyProfileDTO> viceLeaders;
+    private Set<UserSummaryDTO> leaders;
+    private Set<UserSummaryDTO> viceLeaders;
     public GroupChatDTO() {}
-    public GroupChatDTO(Long id, LocalDateTime createTime, Set<MyProfileDTO> users, Set<MyProfileDTO> leaders, Set<MyProfileDTO> viceLeaders, String name, boolean isActive, LocalDateTime lastActiveTime) {
-        super(id, createTime, users, ChatboxType.GROUP_CHAT, isActive, lastActiveTime);
-        this.name = name;
+    public GroupChatDTO(Long id, Set<UserSummaryDTO> users, Set<UserSummaryDTO> leaders, Set<UserSummaryDTO> viceLeaders, String name, boolean isActive, LocalDateTime lastActiveTime) {
+        super(id, name, ChatboxType.GROUP_CHAT, isActive, lastActiveTime);
         this.leaders = leaders;
         this.viceLeaders = viceLeaders;
     }
 
-    public String getName() {
-        return name;
-    }
-    public Set<MyProfileDTO> getLeaders() {
+    public Set<UserSummaryDTO> getLeaders() {
         return leaders;
     }
-    public Set<MyProfileDTO> getViceLeaders() {
+    public Set<UserSummaryDTO> getViceLeaders() {
         return viceLeaders;
     }
 
-    public void setName(String name) {
-        this.name = name;
-    }
-    public void setLeaders(Set<MyProfileDTO> leaders) {
+    public void setLeaders(Set<UserSummaryDTO> leaders) {
         this.leaders = leaders;
     }
-    public void setViceLeaders(Set<MyProfileDTO> viceLeaders) {
+    public void setViceLeaders(Set<UserSummaryDTO> viceLeaders) {
         this.viceLeaders = viceLeaders;
     }
 }

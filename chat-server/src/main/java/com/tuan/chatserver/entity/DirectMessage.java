@@ -11,7 +11,7 @@ import java.util.Set;
 @Table(name = "direct_message")
 public class DirectMessage extends ChatBox{
     public DirectMessage() {}
-    public DirectMessage(LocalDateTime createTime, Set<User> users, boolean isActive, LocalDateTime lastActiveTime) {
-        super(createTime, users, ChatboxType.DIRECT_MESSAGE, isActive, lastActiveTime);
+    public DirectMessage(String name, LocalDateTime createTime, Set<User> users, boolean isActive, LocalDateTime lastActiveTime) {
+        super(name, createTime, users, ChatboxType.DIRECT_MESSAGE, isActive, lastActiveTime);
     }
 }

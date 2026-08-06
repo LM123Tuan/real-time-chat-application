@@ -13,6 +13,8 @@ public abstract class ChatBox {
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE)
     private Long id;
+    @Column(name = "name", nullable = false)
+    private String name;
     @Column(nullable = false)
     private LocalDateTime createTime;
     @ManyToMany
@@ -31,7 +33,8 @@ public abstract class ChatBox {
     private LocalDateTime lastActiveTime;
 
     public ChatBox() {}
-    public ChatBox(LocalDateTime createTime, Set<User> users, ChatboxType chatboxType, boolean isActive, LocalDateTime lastActiveTime) {
+    public ChatBox(String name, LocalDateTime createTime, Set<User> users, ChatboxType chatboxType, boolean isActive, LocalDateTime lastActiveTime) {
+        this.name=name;
         this.createTime = createTime;
         this.users = users;
         this.chatboxType = chatboxType;
@@ -42,6 +45,7 @@ public abstract class ChatBox {
     public Long getId(){
         return id;
     }
+    public String getName() {return name;}
     public LocalDateTime getCreateTime(){
         return createTime;
     }
@@ -58,6 +62,7 @@ public abstract class ChatBox {
         return lastActiveTime;
     }
 
+    public void setName(String name) {this.name=name;}
     public void setCreateTime(LocalDateTime createTime){
         this.createTime = createTime;
     }

@@ -1,8 +1,10 @@
 package com.tuan.chatserver.service;
 
 import com.tuan.chatserver.dto.GroupChatDTO;
+import com.tuan.chatserver.dto.RenameGroupChatRequest;
 import com.tuan.chatserver.entity.GroupChat;
 import com.tuan.chatserver.entity.User;
+import com.tuan.chatserver.enums.GroupChatPermission;
 import com.tuan.chatserver.exception.*;
 import com.tuan.chatserver.mapper.GroupChatMapper;
 import com.tuan.chatserver.repository.GroupChatRepository;
@@ -45,7 +47,16 @@ public class GroupChatService {
         return user;
     }
 
-    public void createGroupChat(Long creatorId, Set<Long> otherUserIds){
+    private Set<User> mapOptionalUsersToUserEntities(Set<Long> userIds){
+        Set<User> users = new HashSet<>();
+        for(Long id:userIds){
+            User user = mapOptionalUserToEntity(id);
+            users.add(user);
+        }
+        return users;
+    }
+
+    public GroupChatDTO createGroupChat(Long creatorId, Set<Long> otherUserIds){
         logger.info("Attempting to create group chat, creatorId={}", creatorId);
         if(otherUserIds==null||otherUserIds.size()<=1){
             logger.warn("Create group chat failed: otherUsers is null or has less than 2 members");
@@ -70,6 +81,8 @@ public class GroupChatService {
             try{
                 groupChatRepository.save(groupChat);
                 logger.info("Group chat created successfully, id={}, name={}", groupChat.getId(), name);
+                GroupChatDTO dto = GroupChatMapper.mapGroupChatToGroupChatDTO(groupChat);
+                return dto;
             }catch (Exception e){
                 logger.error("Error occurred while creating group chat", e);
                 throw new DataAccessFailureException(e);
@@ -77,9 +90,17 @@ public class GroupChatService {
         }
     }
 
-    public void renameGroupChat(Long groupChatId, String newName){
+    public void renameGroupChat(Long requesterId, RenameGroupChatRequest request){
+        Long groupChatId = request.getGroupChatId();
+        String newName = request.getNewName();
         logger.info("Attempting to rename group chat, groupChatId={}", groupChatId);
         GroupChat groupChat=mapOptionalGroupChatToEntity(groupChatId);
+        User requester = userRepository.findById(requesterId).orElseThrow(() -> {
+            throw new UserNotFoundException(requesterId);
+        });
+        if(!groupChat.getUsers().contains(requester)){
+            throw new UserNotInChatBoxException(groupChatId, requesterId);
+        }
         groupChat.setName(newName);
         try{
             groupChatRepository.save(groupChat);
@@ -90,25 +111,45 @@ public class GroupChatService {
         }
     }
 
-    public void addMemberToGroup(Long requesterId, Long groupChatId, Long memberId){
-        logger.info("Attempting to add member to group, requesterId={}, groupChatId={}, memberId={}", requesterId, groupChatId, memberId);
+    private Set<User> checkUserIsAlreadyInGroupChat(Set<User> users, Set<User> requesters){
+        Set<User> res= new HashSet<>();
+        for(User user:requesters){
+            if(users.contains(user)){
+                res.add(user);
+            }
+        }
+        return res;
+    }
+
+    private Set<Long> mapUsersToUserIds(Set<User> users){
+        Set<Long> res= new HashSet<>();
+        for(User user:users){
+            res.add(user.getId());
+        }
+        return res;
+    }
+
+    public void addMembersToGroup(Long requesterId, Long groupChatId, Set<Long> otherUserIds){
+        logger.info("Attempting to add member to group, requesterId={}, groupChatId={}, memberIds={}", requesterId, groupChatId, otherUserIds);
         GroupChat groupChat=mapOptionalGroupChatToEntity(groupChatId);
         User requester=mapOptionalUserToEntity(requesterId);
-        User user=mapOptionalUserToEntity(memberId);
+        Set<User> addedUsers=mapOptionalUsersToUserEntities(otherUserIds);
         Set<User> users=groupChat.getUsers();
         if(users.contains(requester)){
-            if(!users.contains(user)){
-                users.add(user);
+            Set<User> checkUser = checkUserIsAlreadyInGroupChat(users, addedUsers);
+            if(checkUser.isEmpty()){
+                users.addAll(addedUsers);
                 try{
                     groupChatRepository.save(groupChat);
-                    logger.info("Member added to group successfully, groupChatId={}, memberId={}", groupChatId, memberId);
+                    logger.info("Member added to group successfully, groupChatId={}, memberIds={}", groupChatId, otherUserIds);
                 }catch (Exception e){
-                    logger.error("Error occurred while adding member to group, groupChatId={}, memberId={}", groupChatId, memberId, e);
+                    logger.error("Error occurred while adding member to group, groupChatId={}, memberId={}", groupChatId, otherUserIds, e);
                     throw new DataAccessFailureException(e);
                 }
             }else{
-                logger.warn("Add member failed: member already in group, groupChatId={}, memberId={}", groupChatId, memberId);
-                throw new UserAlreadyInChatBoxException(groupChatId, memberId);
+                logger.warn("Add member failed: member already in group, groupChatId={}, memberId={}", groupChatId, otherUserIds);
+                Set<Long> userIds=mapUsersToUserIds(checkUser);
+                throw new UserAlreadyInChatBoxException(groupChatId, userIds);
             }
         }else{
             logger.warn("Add member failed: requester not in group, groupChatId={}, requesterId={}", groupChatId, requesterId);
@@ -199,9 +240,15 @@ public class GroupChatService {
         }
     }
 
-    public GroupChatDTO getGroupChatById(Long groupChatId){
+    public GroupChatDTO getGroupChatById(Long userId, Long groupChatId){
         logger.debug("Fetching group chat by id, groupChatId={}", groupChatId);
         GroupChat groupChat=mapOptionalGroupChatToEntity(groupChatId);
+        User user = userRepository.findById(userId).orElseThrow(() -> {
+            throw new UserNotFoundException(userId);
+        });
+        if(!groupChat.getUsers().contains(user)){
+            throw new UserNotInChatBoxException(groupChatId, userId);
+        }
         return GroupChatMapper.mapGroupChatToGroupChatDTO(groupChat);
     }
 
@@ -371,5 +418,21 @@ public class GroupChatService {
         }
         logger.debug("Found {} active group chats for userId={}", groupChatDTOS.size(), userId);
         return groupChatDTOS;
+    }
+
+    public GroupChatPermission getGroupChatPermission(Long userId, Long groupChatId){
+        GroupChat groupChat = groupChatRepository.findById(groupChatId).orElseThrow(() -> {
+            throw new ChatBoxNotFoundException(groupChatId);
+        });
+        User user = userRepository.findById(userId).orElseThrow(() -> {
+            throw new UserNotFoundException(userId);
+        });
+        if(groupChat.getLeaders().contains(user)){
+            return GroupChatPermission.LEADER;
+        }else if(groupChat.getViceLeaders().contains(user)){
+            return GroupChatPermission.VICE_LEADER;
+        }else{
+            return GroupChatPermission.USER;
+        }
     }
 }

@@ -3,21 +3,18 @@ package com.tuan.chatserver.dto;
 import com.tuan.chatserver.enums.ChatboxType;
 
 import java.time.LocalDateTime;
-import java.util.Set;
 
 public class ChatBoxDTO {
     private Long id;
-    private LocalDateTime createTime;
-    private Set<MyProfileDTO> users;
+    private String name;
     private ChatboxType chatboxType;
     private boolean isActive;
     private LocalDateTime lastActiveTime;
 
     public ChatBoxDTO() {}
-    public ChatBoxDTO(Long id, LocalDateTime createTime, Set<MyProfileDTO> users, ChatboxType chatboxType, boolean isActive, LocalDateTime lastActiveTime) {
+    public ChatBoxDTO(Long id, String name, ChatboxType chatboxType, boolean isActive, LocalDateTime lastActiveTime) {
         this.id = id;
-        this.createTime = createTime;
-        this.users = users;
+        this.name=name;
         this.chatboxType = chatboxType;
         this.isActive = isActive;
         this.lastActiveTime = lastActiveTime;
@@ -26,12 +23,7 @@ public class ChatBoxDTO {
     public Long getId(){
         return id;
     }
-    public LocalDateTime getCreateTime(){
-        return createTime;
-    }
-    public Set<MyProfileDTO> getUsers(){
-        return users;
-    }
+    public String getName() {return name;}
     public ChatboxType getChatboxType(){
         return chatboxType;
     }
@@ -42,12 +34,7 @@ public class ChatBoxDTO {
         return lastActiveTime;
     }
 
-    public void setCreateTime(LocalDateTime createTime){
-        this.createTime = createTime;
-    }
-    public void setUsers(Set<MyProfileDTO> users){
-        this.users = users;
-    }
+    public void setName(String name){this.name=name;}
     public void setChatboxType(ChatboxType chatboxType){
         this.chatboxType = chatboxType;
     }

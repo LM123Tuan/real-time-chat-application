@@ -5,6 +5,7 @@ import com.tuan.chatserver.entity.DirectMessage;
 import com.tuan.chatserver.entity.User;
 import com.tuan.chatserver.exception.DataAccessFailureException;
 import com.tuan.chatserver.exception.UserNotFoundException;
+import com.tuan.chatserver.exception.UserNotInChatBoxException;
 import com.tuan.chatserver.mapper.DirectMessageMapper;
 import com.tuan.chatserver.exception.ChatBoxAlreadyExistsException;
 import com.tuan.chatserver.repository.DirectMessageRepository;
@@ -29,7 +30,7 @@ public class DirectMessageService {
         this.userRepository = userRepository;
     }
 
-    public void createDirectMessage(Long creatorId, Long receiverId) {
+    public DirectMessageDTO createDirectMessage(Long creatorId, Long receiverId) {
         logger.info("Create direct message attempt between userId: {} and userId: {}", creatorId, receiverId);
         User creator = userRepository.findById(creatorId).orElseThrow(() -> {
             logger.warn("Create direct message failed - creator not found: creatorId={}", creatorId);
@@ -46,31 +47,29 @@ public class DirectMessageService {
         Set<User> users=new HashSet<>();
         users.add(creator);
         users.add(receiver);
-        DirectMessage directMessage=new DirectMessage(LocalDateTime.now(), users, true, LocalDateTime.now());
+        String name = creator.getUsername() + " & " + receiver.getUsername();
+        DirectMessage directMessage=new DirectMessage(name, LocalDateTime.now(), users, true, LocalDateTime.now());
         try{
             directMessageRepository.save(directMessage);
             logger.info("Create direct message successful between userId: {} and userId: {}", creatorId, receiverId);
+            DirectMessageDTO dto = DirectMessageMapper.mapDirectMessageToDirectMessageDTO(directMessage);
+            return dto;
         }catch(Exception e){
             logger.error("Create direct message failed while saving between userId: {} and userId: {}", creatorId, receiverId, e);
             throw new DataAccessFailureException(e);
         }
     }
 
-    public DirectMessageDTO getChatBetweenTwoUsersByUsersId(Long userId1,Long userId2){
-        logger.debug("Fetching direct message between userId: {} and userId: {}", userId1, userId2);
-        Optional<DirectMessage> directMessage = directMessageRepository.findBetweenTwoUsers(userId1,userId2);
-        if(directMessage.isPresent()){
-            return DirectMessageMapper.mapDirectMessageToDirectMessageDTO(directMessage.get());
-        }else{
-            logger.warn("Get direct message failed - not found between userId: {} and userId: {}", userId1, userId2);
-            return null;
-        }
-    }
-
-    public DirectMessageDTO getChatBetweenTwoUsersByChatBoxId(Long id){
+    public DirectMessageDTO getChatBetweenTwoUsersByChatBoxId(Long userId, Long id){
         logger.debug("Fetching direct message with chatBoxId: {}", id);
         Optional<DirectMessage> directMessage= directMessageRepository.findById(id);
         if(directMessage.isPresent()){
+            User user = userRepository.findById(id).orElseThrow(() -> {
+                throw new UserNotFoundException(id);
+            });
+            if(!directMessage.get().getUsers().contains(user)){
+                throw new UserNotInChatBoxException(id, userId);
+            }
             return DirectMessageMapper.mapDirectMessageToDirectMessageDTO(directMessage.get());
         }else{
             logger.warn("Get direct message failed - chatBoxId not found: {}", id);
