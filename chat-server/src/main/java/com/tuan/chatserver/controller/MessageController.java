@@ -52,6 +52,7 @@ public class MessageController {
         return ResponseEntity.ok(dto);
     }
 
+    //TODO
     @PatchMapping("/messages/{messageId}/status")
     public ResponseEntity<Void> updateMessageStatus(@PathVariable String messageId) {
         messageService.updateMessageStatus(messageId);

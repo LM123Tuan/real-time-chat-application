@@ -8,6 +8,7 @@ import com.tuan.chatserver.dto.MyProfileDTO;
 import com.tuan.chatserver.entity.Admin;
 import com.tuan.chatserver.entity.ChatBox;
 import com.tuan.chatserver.entity.User;
+import com.tuan.chatserver.exception.AdminAccessDeniedException;
 import com.tuan.chatserver.exception.DataAccessFailureException;
 import com.tuan.chatserver.exception.UserNotFoundException;
 import com.tuan.chatserver.exception.UsernameOrEmailAlreadyExistsException;
@@ -48,6 +49,14 @@ public class AdminService {
         this.bcryptPasswordEncoder = bcryptPasswordEncoder;
     }
 
+    private void validateAdminAccess(Long requesterId) {
+        logger.debug("Validating admin access, requesterId={}", requesterId);
+        if (!adminRepository.existsById(requesterId)) {
+            logger.warn("Access denied: requester is not an admin, requesterId={}", requesterId);
+            throw new AdminAccessDeniedException(requesterId);
+        }
+    }
+
     //ADMIN
 
     public void registerAdmin(AdminRegisterRequest adminRegisterRequest) {
@@ -70,7 +79,8 @@ public class AdminService {
         }
     }
 
-    public AdminDTO findAdminByUsername(String username) {
+    public AdminDTO findAdminByUsername(Long requesterId, String username) {
+        validateAdminAccess(requesterId);
         logger.debug("Fetching admin by username, username={}", username);
         Optional<Admin> admin = adminRepository.findByUsername(username);
         if (admin.isPresent()) {
@@ -83,7 +93,8 @@ public class AdminService {
         }
     }
 
-    public AdminDTO findAdminById(Long id){
+    public AdminDTO findAdminById(Long requesterId, Long id){
+        validateAdminAccess(requesterId);
         logger.debug("Fetching admin by id, id={}", id);
         Optional<Admin> admin = adminRepository.findById(id);
         if (admin.isPresent()) {
@@ -96,7 +107,8 @@ public class AdminService {
         }
     }
 
-    public AdminDTO getAdminProfile(Long id){
+    public AdminDTO getAdminProfile(Long requesterId, Long id){
+        validateAdminAccess(requesterId);
         logger.debug("Fetching admin profile, id={}", id);
         Optional<Admin> admin = adminRepository.findById(id);
         if (admin.isPresent()) {
@@ -111,7 +123,8 @@ public class AdminService {
 
     //USER
 
-    public List<MyProfileDTO> findAllUsers(){
+    public List<MyProfileDTO> findAllUsers(Long requesterId){
+        validateAdminAccess(requesterId);
         logger.debug("Fetching all users");
         List<User> users = userRepository.findAll();
         List<MyProfileDTO> myProfileDTOS = new ArrayList<>();
@@ -123,7 +136,8 @@ public class AdminService {
         return myProfileDTOS;
     }
 
-    public List<MyProfileDTO> findUserByUsernameContaining(String keyword){
+    public List<MyProfileDTO> findUserByUsernameContaining(Long requesterId, String keyword){
+        validateAdminAccess(requesterId);
         logger.debug("Fetching users by username containing keyword, keyword={}", keyword);
         List<User> users = userRepository.findByUsernameContaining(keyword);
         List<MyProfileDTO> myProfileDTOS = new ArrayList<>();
@@ -135,7 +149,8 @@ public class AdminService {
         return myProfileDTOS;
     }
 
-    public void changeActiveStatusForUser(Long id){
+    public void changeActiveStatusForUser(Long requesterId, Long id){
+        validateAdminAccess(requesterId);
         logger.info("Attempting to change active status for user, id={}", id);
         Optional<User> user = userRepository.findById(id);
         if (user.isPresent()) {
@@ -156,7 +171,8 @@ public class AdminService {
 
     //CHATBOX
 
-    public List<ChatBoxDTO> getAllChatBox(){
+    public List<ChatBoxDTO> getAllChatBox(Long requesterId){
+        validateAdminAccess(requesterId);
         logger.debug("Fetching all chatboxes");
         List<ChatBox> chatBoxes=chatBoxRepository.findAll();
         List<ChatBoxDTO> chatBoxDTOS=new ArrayList<>();
@@ -168,7 +184,8 @@ public class AdminService {
         return chatBoxDTOS;
     }
 
-    public List<ChatBoxDTO> getAllUserChatBox(Long userId){
+    public List<ChatBoxDTO> getAllUserChatBox(Long requesterId, Long userId){
+        validateAdminAccess(requesterId);
         logger.debug("Fetching all chatboxes for userId={}", userId);
         List<ChatBox> chatBoxes=chatBoxRepository.findByUserIdOrderByLastActiveTimeDesc(userId);
         List<ChatBoxDTO> chatBoxDTOS=new ArrayList<>();
@@ -182,42 +199,48 @@ public class AdminService {
 
     //STATISTICS
 
-    public Long countUsers(){
+    public Long countUsers(Long requesterId){
+        validateAdminAccess(requesterId);
         logger.debug("Counting total users");
         Long count = userRepository.count();
         logger.debug("Total users count={}", count);
         return count;
     }
 
-    public Long countUsersByActiveStatus(Boolean isActive){
+    public Long countUsersByActiveStatus(Long requesterId, Boolean isActive){
+        validateAdminAccess(requesterId);
         logger.debug("Counting users by active status, isActive={}", isActive);
         Long count = userRepository.countByIsActive(isActive);
         logger.debug("Users count for isActive={} is {}", isActive, count);
         return count;
     }
 
-    public Long countChatBoxes(){
+    public Long countChatBoxes(Long requesterId){
+        validateAdminAccess(requesterId);
         logger.debug("Counting total chatboxes");
         Long count = chatBoxRepository.count();
         logger.debug("Total chatboxes count={}", count);
         return count;
     }
 
-    public Long countChatBoxesByLastActiveTimeBetween(LocalDateTime startTime, LocalDateTime endTime) {
+    public Long countChatBoxesByLastActiveTimeBetween(Long requesterId, LocalDateTime startTime, LocalDateTime endTime) {
+        validateAdminAccess(requesterId);
         logger.debug("Counting chatboxes with lastActiveTime between startTime={} and endTime={}", startTime, endTime);
         Long count = chatBoxRepository.countByLastActiveTimeBetween(startTime,endTime);
         logger.debug("Chatboxes count in given time range={}", count);
         return count;
     }
 
-    public Long countMessages(){
+    public Long countMessages(Long requesterId){
+        validateAdminAccess(requesterId);
         logger.debug("Counting total messages");
         Long count = messageRepository.count();
         logger.debug("Total messages count={}", count);
         return count;
     }
 
-    public Long countMessagesByTimestampBetween(LocalDateTime startTime, LocalDateTime endTime) {
+    public Long countMessagesByTimestampBetween(Long requesterId, LocalDateTime startTime, LocalDateTime endTime) {
+        validateAdminAccess(requesterId);
         logger.debug("Counting messages with timestamp between startTime={} and endTime={}", startTime, endTime);
         Long count = messageRepository.countByTimestampBetween(startTime,endTime);
         logger.debug("Messages count in given time range={}", count);
