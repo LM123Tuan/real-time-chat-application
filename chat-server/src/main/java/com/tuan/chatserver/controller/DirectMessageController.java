@@ -21,7 +21,7 @@ public class DirectMessageController {
     }
 
     @GetMapping
-    public ResponseEntity<CursorPaginationResponse<List<DirectMessageDTO>, Long>> getAllPrivateChat(Authentication authentication, CursorPaginationRequest request){
+    public ResponseEntity<CursorPaginationResponse<List<DirectMessageDTO>, Long>> getAllPrivateChat(Authentication authentication, CursorPaginationRequest<Long> request){
         Long userId = ((CustomUserDetails) authentication.getPrincipal()).getPerson().getId();
         CursorPaginationResponse<List<DirectMessageDTO>, Long> dtos = directMessageService.getAllChatByUserId(userId, request);
         return ResponseEntity.ok(dtos);

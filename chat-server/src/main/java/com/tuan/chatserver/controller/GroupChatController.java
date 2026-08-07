@@ -40,7 +40,8 @@ public class GroupChatController {
     }
 
     @GetMapping
-    public ResponseEntity<CursorPaginationResponse<List<GroupChatDTO>, Long>> getAllGroupChat(Authentication authentication, CursorPaginationRequest request){
+    public ResponseEntity<CursorPaginationResponse<List<GroupChatDTO>, Long>> getAllGroupChat(Authentication authentication,
+                                                                                              CursorPaginationRequest<Long> request){
         Long userId = ((CustomUserDetails) authentication.getPrincipal()).getPerson().getId();
         CursorPaginationResponse<List<GroupChatDTO>, Long> dtos = groupChatService.getAllGroupChatByUserId(userId, request);
         return ResponseEntity.ok(dtos);
@@ -49,7 +50,7 @@ public class GroupChatController {
     @GetMapping(params = "keyword")
     public ResponseEntity<CursorPaginationResponse<List<GroupChatDTO>, Long>> getGroupChatsByNameContaining(Authentication authentication,
                                                                             @RequestParam String keyword,
-                                                                            CursorPaginationRequest request){
+                                                                            CursorPaginationRequest<Long> request){
         Long userId = ((CustomUserDetails) authentication.getPrincipal()).getPerson().getId();
         CursorPaginationResponse<List<GroupChatDTO>, Long> dtos = groupChatService.getGroupChatByNameContaining(keyword, userId, request);
         return ResponseEntity.ok(dtos);

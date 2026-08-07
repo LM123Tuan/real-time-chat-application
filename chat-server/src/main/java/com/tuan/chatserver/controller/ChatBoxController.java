@@ -24,7 +24,8 @@ public class ChatBoxController {
     }
 
     @GetMapping
-    public ResponseEntity<CursorPaginationResponse<List<ChatBoxDTO>, Long>> getAllChatBoxes(Authentication authentication, @Valid CursorPaginationRequest request){
+    public ResponseEntity<CursorPaginationResponse<List<ChatBoxDTO>, Long>> getAllChatBoxes(Authentication authentication,
+                                                                                            @Valid CursorPaginationRequest<Long> request){
         Long id = ((CustomUserDetails) authentication.getPrincipal()).getPerson().getId();
         CursorPaginationResponse<List<ChatBoxDTO>, Long> chatBoxes= chatBoxService.getAllChatboxesForUser(id, request);
         return ResponseEntity.ok(chatBoxes);
