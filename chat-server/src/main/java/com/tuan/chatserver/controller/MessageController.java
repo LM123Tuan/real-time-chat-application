@@ -18,26 +18,27 @@ public class MessageController {
         this.messageService = messageService;
     }
 
-    @GetMapping("/chats/{chatBoxId}/messages")
-    public ResponseEntity<CursorPaginationResponse<List<MessageDTO>, String>> loadMessages(
+    @PostMapping("/chats/{chatBoxId}/messages/load")
+    public ResponseEntity<CursorPaginationResponse<List<MessageDTO>>> loadMessages(
             Authentication authentication,
             @PathVariable Long chatBoxId,
-            CursorPaginationRequest<String> request) {
+            @RequestBody CursorPaginationRequest request) {
 
         Long requesterId = ((CustomUserDetails) authentication.getPrincipal()).getPerson().getId();
-        CursorPaginationResponse<List<MessageDTO>, String> dtos = messageService.loadAllMessagesForChatBox(requesterId, chatBoxId, request);
+        CursorPaginationResponse<List<MessageDTO>> dtos = messageService.loadAllMessagesForChatBox(requesterId, chatBoxId, request);
         return ResponseEntity.ok(dtos);
     }
 
-    @GetMapping("/chats/{chatBoxId}/messages/filter")
-    public ResponseEntity<CursorPaginationResponse<List<MessageDTO>, String>> getMessages(
+    @PostMapping("/chats/{chatBoxId}/messages/filter")
+    public ResponseEntity<CursorPaginationResponse<List<MessageDTO>>> getMessages(
             Authentication authentication,
             @PathVariable Long chatBoxId,
-            @ModelAttribute SearchMessageRequest request,
-            CursorPaginationRequest<String> paginationRequest) {
+            @ModelAttribute SearchMessageRequest searchRequest,
+            @RequestBody CursorPaginationRequest request) {
 
         Long requesterId = ((CustomUserDetails) authentication.getPrincipal()).getPerson().getId();
-        CursorPaginationResponse<List<MessageDTO>, String> messages = messageService.findMessages(requesterId, chatBoxId, request, paginationRequest);
+        CursorPaginationResponse<List<MessageDTO>> messages = messageService.findMessages(
+                requesterId, chatBoxId, searchRequest, request);
         return ResponseEntity.ok(messages);
     }
 

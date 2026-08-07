@@ -5,12 +5,13 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDateTime;
+
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class CursorPaginationResponse<T>{
-    private T data;
-    private String nextCursor;
-    private boolean hasNext;
+public class PageCursor<C> {
+    private LocalDateTime timestamp;
+    private C id;
 }

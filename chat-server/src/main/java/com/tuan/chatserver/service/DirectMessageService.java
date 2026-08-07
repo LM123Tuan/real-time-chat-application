@@ -1,8 +1,10 @@
 package com.tuan.chatserver.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.tuan.chatserver.dto.CursorPaginationRequest;
 import com.tuan.chatserver.dto.CursorPaginationResponse;
 import com.tuan.chatserver.dto.DirectMessageDTO;
+import com.tuan.chatserver.dto.PageCursor;
 import com.tuan.chatserver.entity.DirectMessage;
 import com.tuan.chatserver.entity.User;
 import com.tuan.chatserver.exception.DataAccessFailureException;
@@ -13,6 +15,7 @@ import com.tuan.chatserver.exception.ChatBoxAlreadyExistsException;
 import com.tuan.chatserver.repository.DirectMessageRepository;
 import com.tuan.chatserver.repository.MessageRepository;
 import com.tuan.chatserver.repository.UserRepository;
+import com.tuan.chatserver.util.CursorCodec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,15 +32,18 @@ public class DirectMessageService {
     private final DirectMessageRepository directMessageRepository;
     private final UserRepository userRepository;
     private final MessageRepository messageRepository;
+    private final CursorCodec cursorCodec;
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     @Autowired
     public DirectMessageService(DirectMessageRepository directMessageRepository,
                                 UserRepository userRepository,
-                                MessageRepository messageRepository) {
+                                MessageRepository messageRepository,
+                                CursorCodec cursorCodec) {
         this.directMessageRepository = directMessageRepository;
         this.userRepository = userRepository;
         this.messageRepository = messageRepository;
+        this.cursorCodec=cursorCodec;
     }
 
     public DirectMessageDTO createDirectMessage(Long creatorId, Long receiverId) {
@@ -87,19 +93,21 @@ public class DirectMessageService {
         }
     }
 
-    public CursorPaginationResponse<List<DirectMessageDTO>, Long> getAllChatByUserId(Long userId, CursorPaginationRequest<Long> request) {
+    public CursorPaginationResponse<List<DirectMessageDTO>> getAllChatByUserId(Long userId, CursorPaginationRequest request) {
         logger.debug("Fetching active direct messages for userId: {}", userId);
 
         Pageable pageable = PageRequest.of(0, request.getSize() + 1);
 
         List<DirectMessage> directMessagesRaw;
-        if (request.getCursorId() == null) {
+        if (request.getCursor() == null) {
             directMessagesRaw = directMessageRepository.findByUserIdOfFirstPage(userId, pageable);
         } else {
+            PageCursor<Long> cursorData = cursorCodec.decode(
+                    request.getCursor(), new TypeReference<PageCursor<Long>>() {});
             directMessagesRaw = directMessageRepository.findByUserIdOfNextPage(
                     userId,
-                    request.getCursorTimestamp(),
-                    request.getCursorId(),
+                    cursorData.getTimestamp(),
+                    cursorData.getId(),
                     pageable
             );
         }
@@ -141,16 +149,15 @@ public class DirectMessageService {
             }
         }
 
-        LocalDateTime nextTimestamp = null;
-        Long nextCursor = null;
+        String nextCursor = null;
         if (!directMessages.isEmpty()) {
             DirectMessage lastDm = directMessages.get(directMessages.size() - 1);
-            nextTimestamp = lastDm.getLastActiveTime();
-            nextCursor = lastDm.getId();
+            PageCursor<Long> cursorData = new PageCursor<>(lastDm.getLastActiveTime(), lastDm.getId());
+            nextCursor = cursorCodec.encode(cursorData);
         }
 
-        CursorPaginationResponse<List<DirectMessageDTO>, Long> response =
-                new CursorPaginationResponse<>(directMessageDTOs, nextTimestamp, nextCursor, hasNext);
+        CursorPaginationResponse<List<DirectMessageDTO>> response =
+                new CursorPaginationResponse<>(directMessageDTOs, nextCursor, hasNext);
 
         logger.debug("Found {} direct message(s) for userId: {}", directMessageDTOs.size(), userId);
         return response;

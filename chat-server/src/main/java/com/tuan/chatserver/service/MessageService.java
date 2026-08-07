@@ -4,6 +4,7 @@ import com.tuan.chatserver.document.Message;
 import com.tuan.chatserver.dto.CursorPaginationRequest;
 import com.tuan.chatserver.dto.CursorPaginationResponse;
 import com.tuan.chatserver.dto.MessageDTO;
+import com.tuan.chatserver.dto.PageCursor;
 import com.tuan.chatserver.dto.SearchMessageRequest;
 import com.tuan.chatserver.entity.ChatBox;
 import com.tuan.chatserver.entity.User;
@@ -13,6 +14,8 @@ import com.tuan.chatserver.mapper.MessageMapper;
 import com.tuan.chatserver.repository.ChatBoxRepository;
 import com.tuan.chatserver.repository.MessageRepository;
 import com.tuan.chatserver.repository.UserRepository;
+import com.tuan.chatserver.util.CursorCodec;
+import com.fasterxml.jackson.core.type.TypeReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
@@ -37,20 +40,27 @@ public class MessageService {
     private final UserRepository userRepository;
     private final MongoTransactionManager mongoTransactionManager;
     private final MessageMapper messageMapper;
+    private final CursorCodec cursorCodec;
 
     @Autowired
-    public MessageService(MessageRepository messageRepository, ChatBoxRepository chatBoxRepository, UserRepository userRepository, MongoTransactionManager mongoTransactionManager, MessageMapper messageMapper) {
+    public MessageService(MessageRepository messageRepository,
+                          ChatBoxRepository chatBoxRepository,
+                          UserRepository userRepository,
+                          MongoTransactionManager mongoTransactionManager,
+                          MessageMapper messageMapper,
+                          CursorCodec cursorCodec) {
         this.messageRepository = messageRepository;
         this.chatBoxRepository = chatBoxRepository;
         this.userRepository = userRepository;
         this.mongoTransactionManager = mongoTransactionManager;
         this.messageMapper = messageMapper;
+        this.cursorCodec = cursorCodec;
     }
 
     @Transactional(readOnly = true)
-    public CursorPaginationResponse<List<MessageDTO>, String> findMessages(
+    public CursorPaginationResponse<List<MessageDTO>> findMessages(
             Long requesterId, Long chatBoxId, SearchMessageRequest request,
-            CursorPaginationRequest<String> paginationRequest) {
+            CursorPaginationRequest paginationRequest) {
 
         ChatBox chatBox = chatBoxRepository.findById(chatBoxId).orElseThrow(() -> {
             logger.warn("Validation failed: chatbox not found, chatBoxId={}", chatBoxId);
@@ -82,6 +92,10 @@ public class MessageService {
         Pageable pageable = PageRequest.of(0, paginationRequest.getSize() + 1,
                 Sort.by(Sort.Direction.DESC, "timestamp", "id"));
 
+        PageCursor<String> cursorData = paginationRequest.getCursor() == null
+                ? null
+                : cursorCodec.decode(paginationRequest.getCursor(), new TypeReference<PageCursor<String>>() {});
+
         List<Message> messages;
         if (senderId != null) {
             User sender = userRepository.findById(senderId).orElseThrow(() -> {
@@ -93,23 +107,23 @@ public class MessageService {
                 throw new UserNotInChatBoxException(chatBoxId, senderId);
             }
 
-            if (paginationRequest.getCursorTimestamp() == null) {
+            if (cursorData == null) {
                 messages = messageRepository.findBySenderIdAndChatBoxIdAndTimestampBetweenForFirstPage(
                         senderId, chatBoxId, startTime, endTime, pageable);
             } else {
                 messages = messageRepository.findBySenderIdAndChatBoxIdAndTimestampBetweenForNextPage(
                         senderId, chatBoxId, startTime, endTime,
-                        paginationRequest.getCursorTimestamp(), paginationRequest.getCursorId(),
+                        cursorData.getTimestamp(), cursorData.getId(),
                         pageable);
             }
         } else {
-            if (paginationRequest.getCursorTimestamp() == null) {
+            if (cursorData == null) {
                 messages = messageRepository.findByChatBoxIdAndTimestampBetweenForFirstPage(
                         chatBoxId, startTime, endTime, pageable);
             } else {
                 messages = messageRepository.findByChatBoxIdAndTimestampBetweenForNextPage(
                         chatBoxId, startTime, endTime,
-                        paginationRequest.getCursorTimestamp(), paginationRequest.getCursorId(),
+                        cursorData.getTimestamp(), cursorData.getId(),
                         pageable);
             }
         }
@@ -121,16 +135,15 @@ public class MessageService {
 
         List<MessageDTO> messageDTOs = mapToDTOList(messages);
 
-        LocalDateTime nextTimestamp = null;
         String nextCursor = null;
         if (!messages.isEmpty()) {
             Message lastMessage = messages.get(messages.size() - 1);
-            nextTimestamp = lastMessage.getTimestamp();
-            nextCursor = lastMessage.getId();
+            PageCursor<String> nextCursorData = new PageCursor<>(lastMessage.getTimestamp(), lastMessage.getId());
+            nextCursor = cursorCodec.encode(nextCursorData);
         }
 
-        CursorPaginationResponse<List<MessageDTO>, String> response =
-                new CursorPaginationResponse<>(messageDTOs, nextTimestamp, nextCursor, hasNext);
+        CursorPaginationResponse<List<MessageDTO>> response =
+                new CursorPaginationResponse<>(messageDTOs, nextCursor, hasNext);
 
         logger.debug("Found {} message(s) for chatBoxId={}, senderId={}, startTime={}, endTime={}",
                 messageDTOs.size(), chatBoxId, senderId, request.getStartTime(), request.getEndTime());
@@ -241,8 +254,8 @@ public class MessageService {
         }
     }
 
-    public CursorPaginationResponse<List<MessageDTO>, String> loadAllMessagesForChatBox(
-            Long userId, Long chatBoxId, CursorPaginationRequest<String> request) {
+    public CursorPaginationResponse<List<MessageDTO>> loadAllMessagesForChatBox(
+            Long userId, Long chatBoxId, CursorPaginationRequest request) {
 
         logger.debug("Loading messages for chatBoxId={}, userId={}", chatBoxId, userId);
 
@@ -252,13 +265,15 @@ public class MessageService {
                 Sort.by(Sort.Direction.DESC, "timestamp", "id"));
 
         List<Message> messages;
-        if (request.getCursorTimestamp() == null) {
+        if (request.getCursor() == null) {
             messages = messageRepository.findByChatBoxIdForFirstPage(chatBoxId, pageable);
         } else {
+            PageCursor<String> cursorData = cursorCodec.decode(
+                    request.getCursor(), new TypeReference<PageCursor<String>>() {});
             messages = messageRepository.findByChatBoxIdForNextPage(
                     chatBoxId,
-                    request.getCursorTimestamp(),
-                    request.getCursorId(),
+                    cursorData.getTimestamp(),
+                    cursorData.getId(),
                     pageable
             );
         }
@@ -270,16 +285,15 @@ public class MessageService {
 
         List<MessageDTO> dtos = mapToDTOList(messages);
 
-        LocalDateTime nextTimestamp = null;
         String nextCursor = null;
         if (!messages.isEmpty()) {
             Message lastMessage = messages.get(messages.size() - 1);
-            nextTimestamp = lastMessage.getTimestamp();
-            nextCursor = lastMessage.getId();
+            PageCursor<String> cursorData = new PageCursor<>(lastMessage.getTimestamp(), lastMessage.getId());
+            nextCursor = cursorCodec.encode(cursorData);
         }
 
-        CursorPaginationResponse<List<MessageDTO>, String> response =
-                new CursorPaginationResponse<>(dtos, nextTimestamp, nextCursor, hasNext);
+        CursorPaginationResponse<List<MessageDTO>> response =
+                new CursorPaginationResponse<>(dtos, nextCursor, hasNext);
 
         logger.debug("Found {} message(s) for chatBoxId={}", dtos.size(), chatBoxId);
         return response;

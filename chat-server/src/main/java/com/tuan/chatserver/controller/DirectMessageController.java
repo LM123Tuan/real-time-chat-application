@@ -20,10 +20,11 @@ public class DirectMessageController {
         this.directMessageService=directMessageService;
     }
 
-    @GetMapping
-    public ResponseEntity<CursorPaginationResponse<List<DirectMessageDTO>, Long>> getAllPrivateChat(Authentication authentication, CursorPaginationRequest<Long> request){
+    @PostMapping("/search")
+    public ResponseEntity<CursorPaginationResponse<List<DirectMessageDTO>>> getAllPrivateChat(
+            Authentication authentication, @RequestBody CursorPaginationRequest request){
         Long userId = ((CustomUserDetails) authentication.getPrincipal()).getPerson().getId();
-        CursorPaginationResponse<List<DirectMessageDTO>, Long> dtos = directMessageService.getAllChatByUserId(userId, request);
+        CursorPaginationResponse<List<DirectMessageDTO>> dtos = directMessageService.getAllChatByUserId(userId, request);
         return ResponseEntity.ok(dtos);
     }
 

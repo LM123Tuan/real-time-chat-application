@@ -16,6 +16,8 @@ import com.tuan.chatserver.repository.AdminRepository;
 import com.tuan.chatserver.repository.ChatBoxRepository;
 import com.tuan.chatserver.repository.MessageRepository;
 import com.tuan.chatserver.repository.UserRepository;
+import com.tuan.chatserver.util.CursorCodec;
+import com.fasterxml.jackson.core.type.TypeReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,14 +39,16 @@ public class AdminService {
     private final ChatBoxRepository chatBoxRepository;
     private final MessageRepository messageRepository;
     private final BCryptPasswordEncoder bcryptPasswordEncoder;
+    private final CursorCodec cursorCodec;
 
     @Autowired
-    public AdminService(UserRepository userRepository, AdminRepository adminRepository, ChatBoxRepository chatBoxRepository, MessageRepository messageRepository, BCryptPasswordEncoder bcryptPasswordEncoder) {
+    public AdminService(UserRepository userRepository, AdminRepository adminRepository, ChatBoxRepository chatBoxRepository, MessageRepository messageRepository, BCryptPasswordEncoder bcryptPasswordEncoder, CursorCodec cursorCodec) {
         this.userRepository = userRepository;
         this.adminRepository = adminRepository;
         this.chatBoxRepository = chatBoxRepository;
         this.messageRepository = messageRepository;
         this.bcryptPasswordEncoder = bcryptPasswordEncoder;
+        this.cursorCodec = cursorCodec;
     }
 
     private void validateAdminAccess(Long requesterId) {
@@ -121,17 +125,18 @@ public class AdminService {
 
     //USER
 
-    public CursorPaginationResponse<List<OtherProfileDTO>, Long> findAllUsers(Long requesterId, CursorPaginationRequest<Long> request) {
+    public CursorPaginationResponse<List<OtherProfileDTO>> findAllUsers(Long requesterId, CursorPaginationRequest request) {
         validateAdminAccess(requesterId);
         logger.debug("Fetching all users");
 
         Pageable pageable = PageRequest.of(0, request.getSize() + 1);
 
         List<User> users;
-        if (request.getCursorId() == null) {
+        if (request.getCursor() == null) {
             users = userRepository.findAllOfFirstPage(pageable);
         } else {
-            users = userRepository.findAllOfNextPage(request.getCursorId(), pageable);
+            PageCursor<Long> cursorData = cursorCodec.decode(request.getCursor(), new TypeReference<PageCursor<Long>>() {});
+            users = userRepository.findAllOfNextPage(cursorData.getId(), pageable);
         }
 
         boolean hasNext = users.size() > request.getSize();
@@ -144,20 +149,21 @@ public class AdminService {
             profileDTOs.add(UserMapper.mapUserToOtherUserDTO(user));
         }
 
-        Long nextCursor = null;
+        String nextCursor = null;
         if (!users.isEmpty()) {
-            nextCursor = users.get(users.size() - 1).getId();
+            PageCursor<Long> cursorData = new PageCursor<>(null, users.get(users.size() - 1).getId());
+            nextCursor = cursorCodec.encode(cursorData);
         }
 
-        CursorPaginationResponse<List<OtherProfileDTO>, Long> response =
-                new CursorPaginationResponse<>(profileDTOs, null, nextCursor, hasNext);
+        CursorPaginationResponse<List<OtherProfileDTO>> response =
+                new CursorPaginationResponse<>(profileDTOs, nextCursor, hasNext);
 
         logger.debug("Found {} user(s)", profileDTOs.size());
         return response;
     }
 
-    public CursorPaginationResponse<List<OtherProfileDTO>, Long> findUserByUsernameContaining(
-            Long requesterId, String keyword, CursorPaginationRequest<Long> request) {
+    public CursorPaginationResponse<List<OtherProfileDTO>> findUserByUsernameContaining(
+            Long requesterId, String keyword, CursorPaginationRequest request) {
 
         validateAdminAccess(requesterId);
         logger.debug("Fetching users by username containing keyword, keyword={}", keyword);
@@ -165,10 +171,11 @@ public class AdminService {
         Pageable pageable = PageRequest.of(0, request.getSize() + 1);
 
         List<User> users;
-        if (request.getCursorId() == null) {
+        if (request.getCursor() == null) {
             users = userRepository.findByUsernameContainingOfFirstPage(keyword, pageable);
         } else {
-            users = userRepository.findByUsernameContainingOfNextPage(keyword, request.getCursorId(), pageable);
+            PageCursor<Long> cursorData = cursorCodec.decode(request.getCursor(), new TypeReference<PageCursor<Long>>() {});
+            users = userRepository.findByUsernameContainingOfNextPage(keyword, cursorData.getId(), pageable);
         }
 
         boolean hasNext = users.size() > request.getSize();
@@ -181,13 +188,14 @@ public class AdminService {
             profileDTOs.add(UserMapper.mapUserToOtherUserDTO(user));
         }
 
-        Long nextCursor = null;
+        String nextCursor = null;
         if (!users.isEmpty()) {
-            nextCursor = users.get(users.size() - 1).getId();
+            PageCursor<Long> cursorData = new PageCursor<>(null, users.get(users.size() - 1).getId());
+            nextCursor = cursorCodec.encode(cursorData);
         }
 
-        CursorPaginationResponse<List<OtherProfileDTO>, Long> response =
-                new CursorPaginationResponse<>(profileDTOs, null, nextCursor, hasNext);
+        CursorPaginationResponse<List<OtherProfileDTO>> response =
+                new CursorPaginationResponse<>(profileDTOs, nextCursor, hasNext);
 
         logger.debug("Found {} user(s) matching keyword={}", profileDTOs.size(), keyword);
         return response;
@@ -215,17 +223,18 @@ public class AdminService {
 
     //CHATBOX
 
-    public CursorPaginationResponse<List<ChatBoxDTO>, Long> getAllChatBox(Long requesterId, CursorPaginationRequest<Long> request) {
+    public CursorPaginationResponse<List<ChatBoxDTO>> getAllChatBox(Long requesterId, CursorPaginationRequest request) {
         validateAdminAccess(requesterId);
         logger.debug("Fetching all chatboxes");
 
         Pageable pageable = PageRequest.of(0, request.getSize() + 1);
 
         List<ChatBox> chatBoxes;
-        if (request.getCursorId() == null) {
+        if (request.getCursor() == null) {
             chatBoxes = chatBoxRepository.findAllOfFirstPage(pageable);
         } else {
-            chatBoxes = chatBoxRepository.findAllOfNextPage(request.getCursorId(), pageable);
+            PageCursor<Long> cursorData = cursorCodec.decode(request.getCursor(), new TypeReference<PageCursor<Long>>() {});
+            chatBoxes = chatBoxRepository.findAllOfNextPage(cursorData.getId(), pageable);
         }
 
         boolean hasNext = chatBoxes.size() > request.getSize();
@@ -252,20 +261,21 @@ public class AdminService {
             }
         }
 
-        Long nextCursor = null;
+        String nextCursor = null;
         if (!chatBoxes.isEmpty()) {
-            nextCursor = chatBoxes.get(chatBoxes.size() - 1).getId();
+            PageCursor<Long> cursorData = new PageCursor<>(null, chatBoxes.get(chatBoxes.size() - 1).getId());
+            nextCursor = cursorCodec.encode(cursorData);
         }
 
-        CursorPaginationResponse<List<ChatBoxDTO>, Long> response =
-                new CursorPaginationResponse<>(chatBoxDTOs, null, nextCursor, hasNext);
+        CursorPaginationResponse<List<ChatBoxDTO>> response =
+                new CursorPaginationResponse<>(chatBoxDTOs, nextCursor, hasNext);
 
         logger.debug("Found {} chatbox(es)", chatBoxDTOs.size());
         return response;
     }
 
-    public CursorPaginationResponse<List<ChatBoxDTO>, Long> getAllUserChatBox(
-            Long requesterId, Long userId, CursorPaginationRequest<Long> request) {
+    public CursorPaginationResponse<List<ChatBoxDTO>> getAllUserChatBox(
+            Long requesterId, Long userId, CursorPaginationRequest request) {
 
         validateAdminAccess(requesterId);
         logger.debug("Fetching all chatboxes for userId={}", userId);
@@ -273,11 +283,12 @@ public class AdminService {
         Pageable pageable = PageRequest.of(0, request.getSize() + 1);
 
         List<ChatBox> chatBoxes;
-        if (request.getCursorTimestamp() == null) {
+        if (request.getCursor() == null) {
             chatBoxes = chatBoxRepository.findByUserIdOfFirstPage(userId, pageable);
         } else {
+            PageCursor<Long> cursorData = cursorCodec.decode(request.getCursor(), new TypeReference<PageCursor<Long>>() {});
             chatBoxes = chatBoxRepository.findByUserIdOfNextPage(
-                    userId, request.getCursorTimestamp(), request.getCursorId(), pageable);
+                    userId, cursorData.getTimestamp(), cursorData.getId(), pageable);
         }
 
         boolean hasNext = chatBoxes.size() > request.getSize();
@@ -304,16 +315,15 @@ public class AdminService {
             }
         }
 
-        LocalDateTime nextTimestamp = null;
-        Long nextCursor = null;
+        String nextCursor = null;
         if (!chatBoxes.isEmpty()) {
             ChatBox lastChatBox = chatBoxes.get(chatBoxes.size() - 1);
-            nextTimestamp = lastChatBox.getLastActiveTime();
-            nextCursor = lastChatBox.getId();
+            PageCursor<Long> cursorData = new PageCursor<>(lastChatBox.getLastActiveTime(), lastChatBox.getId());
+            nextCursor = cursorCodec.encode(cursorData);
         }
 
-        CursorPaginationResponse<List<ChatBoxDTO>, Long> response =
-                new CursorPaginationResponse<>(chatBoxDTOs, nextTimestamp, nextCursor, hasNext);
+        CursorPaginationResponse<List<ChatBoxDTO>> response =
+                new CursorPaginationResponse<>(chatBoxDTOs, nextCursor, hasNext);
 
         logger.debug("Found {} chatbox(es) for userId={}", chatBoxDTOs.size(), userId);
         return response;

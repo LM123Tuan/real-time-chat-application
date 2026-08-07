@@ -39,20 +39,20 @@ public class GroupChatController {
         return ResponseEntity.ok(permission);
     }
 
-    @GetMapping
-    public ResponseEntity<CursorPaginationResponse<List<GroupChatDTO>, Long>> getAllGroupChat(Authentication authentication,
-                                                                                              CursorPaginationRequest<Long> request){
+    @PostMapping("/search")
+    public ResponseEntity<CursorPaginationResponse<List<GroupChatDTO>>> getAllGroupChat(Authentication authentication,
+                                                                                        @RequestBody CursorPaginationRequest request){
         Long userId = ((CustomUserDetails) authentication.getPrincipal()).getPerson().getId();
-        CursorPaginationResponse<List<GroupChatDTO>, Long> dtos = groupChatService.getAllGroupChatByUserId(userId, request);
+        CursorPaginationResponse<List<GroupChatDTO>> dtos = groupChatService.getAllGroupChatByUserId(userId, request);
         return ResponseEntity.ok(dtos);
     }
 
-    @GetMapping(params = "keyword")
-    public ResponseEntity<CursorPaginationResponse<List<GroupChatDTO>, Long>> getGroupChatsByNameContaining(Authentication authentication,
-                                                                            @RequestParam String keyword,
-                                                                            CursorPaginationRequest<Long> request){
+    @PostMapping("/search")
+    public ResponseEntity<CursorPaginationResponse<List<GroupChatDTO>>> getGroupChatsByNameContaining(Authentication authentication,
+                                                                                                      @RequestParam String keyword,
+                                                                                                      @RequestBody CursorPaginationRequest request){
         Long userId = ((CustomUserDetails) authentication.getPrincipal()).getPerson().getId();
-        CursorPaginationResponse<List<GroupChatDTO>, Long> dtos = groupChatService.getGroupChatByNameContaining(keyword, userId, request);
+        CursorPaginationResponse<List<GroupChatDTO>> dtos = groupChatService.getGroupChatByNameContaining(keyword, userId, request);
         return ResponseEntity.ok(dtos);
     }
 
@@ -66,7 +66,6 @@ public class GroupChatController {
 
     @PatchMapping("/{groupChatId}")
     public ResponseEntity<Void> renameGroupChat(Authentication authentication,
-                                                @PathVariable Long groupChatId,
                                                 @Valid @RequestBody RenameGroupChatRequest request){
         Long userId = ((CustomUserDetails) authentication.getPrincipal()).getPerson().getId();
         groupChatService.renameGroupChat(userId, request);

@@ -1,13 +1,16 @@
 package com.tuan.chatserver.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.tuan.chatserver.dto.ChatBoxDTO;
 import com.tuan.chatserver.dto.CursorPaginationRequest;
 import com.tuan.chatserver.dto.CursorPaginationResponse;
+import com.tuan.chatserver.dto.PageCursor;
 import com.tuan.chatserver.entity.ChatBox;
 import com.tuan.chatserver.enums.ChatboxType;
 import com.tuan.chatserver.mapper.ChatBoxMapper;
 import com.tuan.chatserver.repository.ChatBoxRepository;
 import com.tuan.chatserver.repository.MessageRepository;
+import com.tuan.chatserver.util.CursorCodec;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -15,7 +18,6 @@ import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -24,28 +26,32 @@ public class ChatBoxService {
 
     private final ChatBoxRepository chatBoxRepository;
     private final MessageRepository messageRepository;
+    private final CursorCodec cursorCodec;
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     @Autowired
     public ChatBoxService(ChatBoxRepository chatBoxRepository,
-                          MessageRepository messageRepository) {
+                          MessageRepository messageRepository,
+                          CursorCodec cursorCodec) {
         this.chatBoxRepository = chatBoxRepository;
         this.messageRepository = messageRepository;
+        this.cursorCodec=cursorCodec;
     }
 
-    public CursorPaginationResponse<List<ChatBoxDTO>, Long> getAllChatboxesForUser(Long userId, CursorPaginationRequest<Long> request) {
+    public CursorPaginationResponse<List<ChatBoxDTO>> getAllChatboxesForUser(Long userId, CursorPaginationRequest request) {
         logger.debug("Fetching active chatboxes for userId: {}", userId);
 
         Pageable pageable = PageRequest.of(0, request.getSize() + 1);
 
         List<ChatBox> chatBoxes;
-        if (request.getCursorTimestamp() == null) {
+        if (request.getCursor() == null) {
             chatBoxes = chatBoxRepository.findByUserIdAndIsActiveTrueOfFirstPage(userId, pageable);
         } else {
+            PageCursor<Long> cursorData = cursorCodec.decode(request.getCursor(), new TypeReference<PageCursor<Long>>(){});
             chatBoxes = chatBoxRepository.findByUserIdAndIsActiveTrueOfNextPage(
                     userId,
-                    request.getCursorTimestamp(),
-                    request.getCursorId(),
+                    cursorData.getTimestamp(),
+                    cursorData.getId(),
                     pageable
             );
         }
@@ -88,16 +94,15 @@ public class ChatBoxService {
             }
         }
 
-        LocalDateTime nextTimestamp = null;
-        Long nextCursor = null;
+        String nextCursor = null;
         if (!chatBoxes.isEmpty()) {
             ChatBox lastChatBox = chatBoxes.get(chatBoxes.size() - 1);
-            nextTimestamp = lastChatBox.getLastActiveTime();
-            nextCursor = lastChatBox.getId();
+            PageCursor<Long> cursorData = new PageCursor<>(lastChatBox.getLastActiveTime(), lastChatBox.getId());
+            nextCursor = cursorCodec.encode(cursorData);
         }
 
-        CursorPaginationResponse<List<ChatBoxDTO>, Long> response =
-                new CursorPaginationResponse<>(chatBoxDTOs, nextTimestamp, nextCursor, hasNext);
+        CursorPaginationResponse<List<ChatBoxDTO>> response =
+                new CursorPaginationResponse<>(chatBoxDTOs, nextCursor, hasNext);
 
         logger.debug("Found {} active chatbox(es) for userId: {}", chatBoxDTOs.size(), userId);
         return response;

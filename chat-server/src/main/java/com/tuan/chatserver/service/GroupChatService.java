@@ -1,9 +1,7 @@
 package com.tuan.chatserver.service;
 
-import com.tuan.chatserver.dto.CursorPaginationRequest;
-import com.tuan.chatserver.dto.CursorPaginationResponse;
-import com.tuan.chatserver.dto.GroupChatDTO;
-import com.tuan.chatserver.dto.RenameGroupChatRequest;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.tuan.chatserver.dto.*;
 import com.tuan.chatserver.entity.GroupChat;
 import com.tuan.chatserver.entity.User;
 import com.tuan.chatserver.enums.GroupChatPermission;
@@ -11,6 +9,7 @@ import com.tuan.chatserver.exception.*;
 import com.tuan.chatserver.mapper.GroupChatMapper;
 import com.tuan.chatserver.repository.GroupChatRepository;
 import com.tuan.chatserver.repository.UserRepository;
+import com.tuan.chatserver.util.CursorCodec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,11 +27,15 @@ public class GroupChatService {
 
     private final GroupChatRepository groupChatRepository;
     private final UserRepository userRepository;
+    private final CursorCodec cursorCodec;
 
     @Autowired
-    public GroupChatService(GroupChatRepository groupChatRepository, UserRepository userRepository) {
+    public GroupChatService(GroupChatRepository groupChatRepository,
+                            UserRepository userRepository,
+                            CursorCodec cursorCodec) {
         this.groupChatRepository = groupChatRepository;
         this.userRepository = userRepository;
+        this.cursorCodec=cursorCodec;
     }
 
     private GroupChat mapOptionalGroupChatToEntity(Long groupChatId){
@@ -256,20 +259,22 @@ public class GroupChatService {
         return GroupChatMapper.mapGroupChatToGroupChatDTO(groupChat);
     }
 
-    public CursorPaginationResponse<List<GroupChatDTO>, Long> getGroupChatByNameContaining(String groupChatKeyword, Long userId, CursorPaginationRequest<Long> request) {
+    public CursorPaginationResponse<List<GroupChatDTO>> getGroupChatByNameContaining(String groupChatKeyword, Long userId, CursorPaginationRequest request) {
         logger.debug("Fetching group chats by name containing keyword, keyword={}, userId={}", groupChatKeyword, userId);
 
         Pageable pageable = PageRequest.of(0, request.getSize() + 1);
 
         List<GroupChat> groupChats;
-        if (request.getCursorTimestamp() == null) {
+        if (request.getCursor() == null) {
             groupChats = groupChatRepository.findByNameContainingAndUserIdOfFirstPage(groupChatKeyword, userId, pageable);
         } else {
+            PageCursor<Long> cursorData = cursorCodec.decode(
+                    request.getCursor(), new TypeReference<PageCursor<Long>>() {});
             groupChats = groupChatRepository.findByNameContainingAndUserIdOfNextPage(
                     groupChatKeyword,
                     userId,
-                    request.getCursorTimestamp(),
-                    request.getCursorId(),
+                    cursorData.getTimestamp(),
+                    cursorData.getId(),
                     pageable
             );
         }
@@ -298,16 +303,15 @@ public class GroupChatService {
             }
         }
 
-        LocalDateTime nextTimestamp = null;
-        Long nextCursor = null;
+        String nextCursor = null;
         if (!groupChats.isEmpty()) {
             GroupChat lastGroupChat = groupChats.get(groupChats.size() - 1);
-            nextTimestamp = lastGroupChat.getLastActiveTime();
-            nextCursor = lastGroupChat.getId();
+            PageCursor<Long> cursorData = new PageCursor<>(lastGroupChat.getLastActiveTime(), lastGroupChat.getId());
+            nextCursor = cursorCodec.encode(cursorData);
         }
 
-        CursorPaginationResponse<List<GroupChatDTO>, Long> response =
-                new CursorPaginationResponse<>(groupChatDTOs, nextTimestamp, nextCursor, hasNext);
+        CursorPaginationResponse<List<GroupChatDTO>> response =
+                new CursorPaginationResponse<>(groupChatDTOs, nextCursor, hasNext);
 
         logger.debug("Found {} group chat(s) matching keyword for userId={}", groupChatDTOs.size(), userId);
         return response;
@@ -457,19 +461,21 @@ public class GroupChatService {
         }
     }
 
-    public CursorPaginationResponse<List<GroupChatDTO>, Long> getAllGroupChatByUserId(Long userId, CursorPaginationRequest<Long> request) {
+    public CursorPaginationResponse<List<GroupChatDTO>> getAllGroupChatByUserId(Long userId, CursorPaginationRequest request) {
         logger.debug("Fetching all active group chats for userId={}", userId);
 
         Pageable pageable = PageRequest.of(0, request.getSize() + 1);
 
         List<GroupChat> groupChats;
-        if (request.getCursorTimestamp() == null) {
+        if (request.getCursor() == null) {
             groupChats = groupChatRepository.findByUserIdOfFirstPage(userId, pageable);
         } else {
+            PageCursor<Long> cursorData = cursorCodec.decode(
+                    request.getCursor(), new TypeReference<PageCursor<Long>>() {});
             groupChats = groupChatRepository.findByUserIdOfNextPage(
                     userId,
-                    request.getCursorTimestamp(),
-                    request.getCursorId(),
+                    cursorData.getTimestamp(),
+                    cursorData.getId(),
                     pageable
             );
         }
@@ -498,16 +504,15 @@ public class GroupChatService {
             }
         }
 
-        LocalDateTime nextTimestamp = null;
-        Long nextCursor = null;
+        String nextCursor = null;
         if (!groupChats.isEmpty()) {
             GroupChat lastGroupChat = groupChats.get(groupChats.size() - 1);
-            nextTimestamp = lastGroupChat.getLastActiveTime();
-            nextCursor = lastGroupChat.getId();
+            PageCursor<Long> cursorData = new PageCursor<>(lastGroupChat.getLastActiveTime(), lastGroupChat.getId());
+            nextCursor = cursorCodec.encode(cursorData);
         }
 
-        CursorPaginationResponse<List<GroupChatDTO>, Long> response =
-                new CursorPaginationResponse<>(groupChatDTOs, nextTimestamp, nextCursor, hasNext);
+        CursorPaginationResponse<List<GroupChatDTO>> response =
+                new CursorPaginationResponse<>(groupChatDTOs, nextCursor, hasNext);
 
         logger.debug("Found {} active group chat(s) for userId={}", groupChatDTOs.size(), userId);
         return response;
