@@ -65,13 +65,6 @@ public class UserService {
             throw new UsernameOrEmailAlreadyExistsException();
         }
 
-        Optional<String> oldVerificationToken =
-                verificationService.getTokenByEmail(email);
-
-        oldVerificationToken.ifPresent(token ->
-                verificationService.removeVerification(token, email)
-        );
-
         String newVerificationToken=UUID.randomUUID().toString();
         String hashedPassword = bCryptPasswordEncoder.encode(password);
         PendingRegistration pendingRegistration=new PendingRegistration(email, username, hashedPassword, fullname, phone);

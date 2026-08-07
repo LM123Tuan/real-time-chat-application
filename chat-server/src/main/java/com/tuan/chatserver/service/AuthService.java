@@ -162,11 +162,6 @@ public class AuthService {
 
         String username=user.getUsername();
 
-        Optional<String> oldToken=resetPasswordService.getTokenByEmail(email);
-        if(oldToken.isPresent()){
-            resetPasswordService.removeResetPassword(oldToken.get(), email);
-        }
-
         String newToken=UUID.randomUUID().toString();
         resetPasswordService.createResetPassword(newToken, email);
 
