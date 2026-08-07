@@ -1,8 +1,6 @@
 package com.tuan.chatserver.controller;
 
-import com.tuan.chatserver.dto.MessageDTO;
-import com.tuan.chatserver.dto.SearchMessageRequest;
-import com.tuan.chatserver.dto.SendMessageRequest;
+import com.tuan.chatserver.dto.*;
 import com.tuan.chatserver.security.CustomUserDetails;
 import com.tuan.chatserver.service.MessageService;
 import jakarta.validation.Valid;
@@ -21,23 +19,25 @@ public class MessageController {
     }
 
     @GetMapping("/chats/{chatBoxId}/messages")
-    public ResponseEntity<List<MessageDTO>> loadMessages(
+    public ResponseEntity<CursorPaginationResponse<List<MessageDTO>, String>> loadMessages(
             Authentication authentication,
-            @PathVariable Long chatBoxId) {
+            @PathVariable Long chatBoxId,
+            CursorPaginationRequest<String> request) {
 
         Long requesterId = ((CustomUserDetails) authentication.getPrincipal()).getPerson().getId();
-        List<MessageDTO> dtos = messageService.loadAllMessagesForChatBox(requesterId, chatBoxId);
+        CursorPaginationResponse<List<MessageDTO>, String> dtos = messageService.loadAllMessagesForChatBox(requesterId, chatBoxId, request);
         return ResponseEntity.ok(dtos);
     }
 
     @GetMapping("/chats/{chatBoxId}/messages/filter")
-    public ResponseEntity<List<MessageDTO>> getMessages(
+    public ResponseEntity<CursorPaginationResponse<List<MessageDTO>, String>> getMessages(
             Authentication authentication,
             @PathVariable Long chatBoxId,
-            @ModelAttribute SearchMessageRequest request) {
+            @ModelAttribute SearchMessageRequest request,
+            CursorPaginationRequest<String> paginationRequest) {
 
         Long requesterId = ((CustomUserDetails) authentication.getPrincipal()).getPerson().getId();
-        List<MessageDTO> messages = messageService.findMessages(requesterId, chatBoxId, request);
+        CursorPaginationResponse<List<MessageDTO>, String> messages = messageService.findMessages(requesterId, chatBoxId, request, paginationRequest);
         return ResponseEntity.ok(messages);
     }
 

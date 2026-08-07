@@ -1,8 +1,11 @@
 package com.tuan.chatserver.controller;
 
 import com.tuan.chatserver.dto.ChatBoxDTO;
+import com.tuan.chatserver.dto.CursorPaginationRequest;
+import com.tuan.chatserver.dto.CursorPaginationResponse;
 import com.tuan.chatserver.security.CustomUserDetails;
 import com.tuan.chatserver.service.ChatBoxService;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,9 +24,9 @@ public class ChatBoxController {
     }
 
     @GetMapping
-    public ResponseEntity<List<ChatBoxDTO>> getAllChatBoxes(Authentication authentication){
+    public ResponseEntity<CursorPaginationResponse<List<ChatBoxDTO>, Long>> getAllChatBoxes(Authentication authentication, @Valid CursorPaginationRequest request){
         Long id = ((CustomUserDetails) authentication.getPrincipal()).getPerson().getId();
-        List<ChatBoxDTO> chatBoxes= chatBoxService.getAllChatboxesForUser(id);
+        CursorPaginationResponse<List<ChatBoxDTO>, Long> chatBoxes= chatBoxService.getAllChatboxesForUser(id, request);
         return ResponseEntity.ok(chatBoxes);
     }
 }

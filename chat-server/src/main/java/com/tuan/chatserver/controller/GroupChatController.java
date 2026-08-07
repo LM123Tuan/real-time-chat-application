@@ -1,5 +1,7 @@
 package com.tuan.chatserver.controller;
 
+import com.tuan.chatserver.dto.CursorPaginationRequest;
+import com.tuan.chatserver.dto.CursorPaginationResponse;
 import com.tuan.chatserver.dto.GroupChatDTO;
 import com.tuan.chatserver.dto.RenameGroupChatRequest;
 import com.tuan.chatserver.enums.GroupChatPermission;
@@ -38,17 +40,18 @@ public class GroupChatController {
     }
 
     @GetMapping
-    public ResponseEntity<List<GroupChatDTO>> getAllGroupChat(Authentication authentication){
+    public ResponseEntity<CursorPaginationResponse<List<GroupChatDTO>, Long>> getAllGroupChat(Authentication authentication, CursorPaginationRequest request){
         Long userId = ((CustomUserDetails) authentication.getPrincipal()).getPerson().getId();
-        List<GroupChatDTO> dtos = groupChatService.getAllGroupChatByUserId(userId);
+        CursorPaginationResponse<List<GroupChatDTO>, Long> dtos = groupChatService.getAllGroupChatByUserId(userId, request);
         return ResponseEntity.ok(dtos);
     }
 
     @GetMapping(params = "keyword")
-    public ResponseEntity<List<GroupChatDTO>> getGroupChatsByNameContaining(Authentication authentication,
-                                                                            @RequestParam String keyword){
+    public ResponseEntity<CursorPaginationResponse<List<GroupChatDTO>, Long>> getGroupChatsByNameContaining(Authentication authentication,
+                                                                            @RequestParam String keyword,
+                                                                            CursorPaginationRequest request){
         Long userId = ((CustomUserDetails) authentication.getPrincipal()).getPerson().getId();
-        List<GroupChatDTO> dtos = groupChatService.getGroupChatByNameContaining(keyword, userId);
+        CursorPaginationResponse<List<GroupChatDTO>, Long> dtos = groupChatService.getGroupChatByNameContaining(keyword, userId, request);
         return ResponseEntity.ok(dtos);
     }
 

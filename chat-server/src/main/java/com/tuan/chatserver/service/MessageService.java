@@ -1,6 +1,8 @@
 package com.tuan.chatserver.service;
 
 import com.tuan.chatserver.document.Message;
+import com.tuan.chatserver.dto.CursorPaginationRequest;
+import com.tuan.chatserver.dto.CursorPaginationResponse;
 import com.tuan.chatserver.dto.MessageDTO;
 import com.tuan.chatserver.dto.SearchMessageRequest;
 import com.tuan.chatserver.entity.ChatBox;
@@ -13,6 +15,9 @@ import com.tuan.chatserver.repository.MessageRepository;
 import com.tuan.chatserver.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.MongoTransactionManager;
@@ -43,7 +48,10 @@ public class MessageService {
     }
 
     @Transactional(readOnly = true)
-    public List<MessageDTO> findMessages(Long requesterId, Long chatBoxId, SearchMessageRequest request) {
+    public CursorPaginationResponse<List<MessageDTO>, String> findMessages(
+            Long requesterId, Long chatBoxId, SearchMessageRequest request,
+            CursorPaginationRequest<String> paginationRequest) {
+
         ChatBox chatBox = chatBoxRepository.findById(chatBoxId).orElseThrow(() -> {
             logger.warn("Validation failed: chatbox not found, chatBoxId={}", chatBoxId);
             return new ChatBoxNotFoundException(chatBoxId);
@@ -54,42 +62,79 @@ public class MessageService {
         });
         Long senderId = request.getSenderId();
 
-        if(!chatBox.getUsers().contains(requester)){
+        if (!chatBox.getUsers().contains(requester)) {
             throw new UserNotInChatBoxException(chatBoxId, requesterId);
         }
 
         LocalDateTime startTime = request.getStartTime();
-        if(request.getStartTime() == null){
+        if (request.getStartTime() == null) {
             startTime = chatBox.getCreateTime();
         }
 
         LocalDateTime endTime = request.getEndTime();
-        if(request.getEndTime() == null){
+        if (request.getEndTime() == null) {
             endTime = chatBox.getLastActiveTime();
         }
 
-        logger.debug("Resolving message query, chatBoxId={}, senderId={}, startTime={}, endTime={}", chatBoxId, senderId, request.getStartTime(), request.getEndTime());
+        logger.debug("Resolving message query, chatBoxId={}, senderId={}, startTime={}, endTime={}",
+                chatBoxId, senderId, request.getStartTime(), request.getEndTime());
+
+        Pageable pageable = PageRequest.of(0, paginationRequest.getSize() + 1,
+                Sort.by(Sort.Direction.DESC, "timestamp", "id"));
 
         List<Message> messages;
-        if (request.getSenderId() != null) {
+        if (senderId != null) {
             User sender = userRepository.findById(senderId).orElseThrow(() -> {
                 logger.warn("Validation failed: user not found, userId={}", senderId);
                 return new UserNotFoundException(senderId);
             });
 
-            if(!chatBox.getUsers().contains(sender)){
+            if (!chatBox.getUsers().contains(sender)) {
                 throw new UserNotInChatBoxException(chatBoxId, senderId);
             }
 
-            messages = messageRepository.findBySenderIdAndChatBoxIdAndTimestampBetweenOrderByTimestampDesc(
-                    senderId, chatBoxId, startTime, endTime);
-        }else {
-            messages = messageRepository.findByChatBoxIdAndTimestampBetweenOrderByTimestampDesc(chatBoxId, startTime, endTime);
+            if (paginationRequest.getCursorTimestamp() == null) {
+                messages = messageRepository.findBySenderIdAndChatBoxIdAndTimestampBetweenForFirstPage(
+                        senderId, chatBoxId, startTime, endTime, pageable);
+            } else {
+                messages = messageRepository.findBySenderIdAndChatBoxIdAndTimestampBetweenForNextPage(
+                        senderId, chatBoxId, startTime, endTime,
+                        paginationRequest.getCursorTimestamp(), paginationRequest.getCursorId(),
+                        pageable);
+            }
+        } else {
+            if (paginationRequest.getCursorTimestamp() == null) {
+                messages = messageRepository.findByChatBoxIdAndTimestampBetweenForFirstPage(
+                        chatBoxId, startTime, endTime, pageable);
+            } else {
+                messages = messageRepository.findByChatBoxIdAndTimestampBetweenForNextPage(
+                        chatBoxId, startTime, endTime,
+                        paginationRequest.getCursorTimestamp(), paginationRequest.getCursorId(),
+                        pageable);
+            }
+        }
+
+        boolean hasNext = messages.size() > paginationRequest.getSize();
+        if (hasNext) {
+            messages = messages.subList(0, paginationRequest.getSize());
         }
 
         List<MessageDTO> messageDTOs = mapToDTOList(messages);
-        logger.debug("Found {} message(s) for chatBoxId={}, senderId={}, startTime={}, endTime={}", messageDTOs.size(), chatBoxId, senderId, request.getStartTime(), request.getEndTime());
-        return messageDTOs;
+
+        LocalDateTime nextTimestamp = null;
+        String nextCursor = null;
+        if (!messages.isEmpty()) {
+            Message lastMessage = messages.get(messages.size() - 1);
+            nextTimestamp = lastMessage.getTimestamp();
+            nextCursor = lastMessage.getId();
+        }
+
+        CursorPaginationResponse<List<MessageDTO>, String> response =
+                new CursorPaginationResponse<>(messageDTOs, nextTimestamp, nextCursor, hasNext);
+
+        logger.debug("Found {} message(s) for chatBoxId={}, senderId={}, startTime={}, endTime={}",
+                messageDTOs.size(), chatBoxId, senderId, request.getStartTime(), request.getEndTime());
+        return response;
     }
 
     private List<MessageDTO> mapToDTOList(List<Message> messages) {
@@ -196,13 +241,47 @@ public class MessageService {
         }
     }
 
-    public List<MessageDTO> loadAllMessagesForChatBox(Long userId, Long chatBoxId){
+    public CursorPaginationResponse<List<MessageDTO>, String> loadAllMessagesForChatBox(
+            Long userId, Long chatBoxId, CursorPaginationRequest<String> request) {
+
+        logger.debug("Loading messages for chatBoxId={}, userId={}", chatBoxId, userId);
+
         validateUserInChatBox(userId, chatBoxId);
 
-        List<Message> messages = messageRepository.findByChatBoxIdOrderByTimestampDesc(chatBoxId);
+        Pageable pageable = PageRequest.of(0, request.getSize() + 1,
+                Sort.by(Sort.Direction.DESC, "timestamp", "id"));
+
+        List<Message> messages;
+        if (request.getCursorTimestamp() == null) {
+            messages = messageRepository.findByChatBoxIdForFirstPage(chatBoxId, pageable);
+        } else {
+            messages = messageRepository.findByChatBoxIdForNextPage(
+                    chatBoxId,
+                    request.getCursorTimestamp(),
+                    request.getCursorId(),
+                    pageable
+            );
+        }
+
+        boolean hasNext = messages.size() > request.getSize();
+        if (hasNext) {
+            messages = messages.subList(0, request.getSize());
+        }
 
         List<MessageDTO> dtos = mapToDTOList(messages);
 
-        return dtos;
+        LocalDateTime nextTimestamp = null;
+        String nextCursor = null;
+        if (!messages.isEmpty()) {
+            Message lastMessage = messages.get(messages.size() - 1);
+            nextTimestamp = lastMessage.getTimestamp();
+            nextCursor = lastMessage.getId();
+        }
+
+        CursorPaginationResponse<List<MessageDTO>, String> response =
+                new CursorPaginationResponse<>(dtos, nextTimestamp, nextCursor, hasNext);
+
+        logger.debug("Found {} message(s) for chatBoxId={}", dtos.size(), chatBoxId);
+        return response;
     }
 }

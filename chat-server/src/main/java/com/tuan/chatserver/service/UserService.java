@@ -235,7 +235,7 @@ public class UserService {
     private OtherProfileDTO findActiveUserByEmail(String email){
         logger.debug("Searching active user by exact email: {}", email);
 
-        User user = userRepository.findByUsernameAndIsActiveTrue(email)
+        User user = userRepository.findByEmailAndIsActiveTrue(email)
                 .orElseThrow(() -> {
                     logger.warn("Search failed - no active user found for email: {}", email);
                     return new UserNotFoundException(email);

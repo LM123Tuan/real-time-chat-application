@@ -19,13 +19,14 @@ import com.tuan.chatserver.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class AdminService {
@@ -120,30 +121,76 @@ public class AdminService {
 
     //USER
 
-    public List<OtherProfileDTO> findAllUsers(Long requesterId){
+    public CursorPaginationResponse<List<OtherProfileDTO>, Long> findAllUsers(Long requesterId, CursorPaginationRequest<Long> request) {
         validateAdminAccess(requesterId);
         logger.debug("Fetching all users");
-        List<User> users = userRepository.findAll();
-        List<OtherProfileDTO> profileDTOS = new ArrayList<>();
-        for(User user:users){
-            OtherProfileDTO profileDTO = UserMapper.mapUserToOtherUserDTO(user);
-            profileDTOS.add(profileDTO);
+
+        Pageable pageable = PageRequest.of(0, request.getSize() + 1);
+
+        List<User> users;
+        if (request.getCursorId() == null) {
+            users = userRepository.findAllOfFirstPage(pageable);
+        } else {
+            users = userRepository.findAllOfNextPage(request.getCursorId(), pageable);
         }
-        logger.debug("Found {} user(s)", profileDTOS.size());
-        return profileDTOS;
+
+        boolean hasNext = users.size() > request.getSize();
+        if (hasNext) {
+            users = users.subList(0, request.getSize());
+        }
+
+        List<OtherProfileDTO> profileDTOs = new ArrayList<>();
+        for (User user : users) {
+            profileDTOs.add(UserMapper.mapUserToOtherUserDTO(user));
+        }
+
+        Long nextCursor = null;
+        if (!users.isEmpty()) {
+            nextCursor = users.get(users.size() - 1).getId();
+        }
+
+        CursorPaginationResponse<List<OtherProfileDTO>, Long> response =
+                new CursorPaginationResponse<>(profileDTOs, null, nextCursor, hasNext);
+
+        logger.debug("Found {} user(s)", profileDTOs.size());
+        return response;
     }
 
-    public List<OtherProfileDTO> findUserByUsernameContaining(Long requesterId, String keyword){
+    public CursorPaginationResponse<List<OtherProfileDTO>, Long> findUserByUsernameContaining(
+            Long requesterId, String keyword, CursorPaginationRequest<Long> request) {
+
         validateAdminAccess(requesterId);
         logger.debug("Fetching users by username containing keyword, keyword={}", keyword);
-        List<User> users = userRepository.findByUsernameContaining(keyword);
-        List<OtherProfileDTO> profileDTOS = new ArrayList<>();
-        for(User user:users){
-            OtherProfileDTO profileDTO = UserMapper.mapUserToOtherUserDTO(user);
-            profileDTOS.add(profileDTO);
+
+        Pageable pageable = PageRequest.of(0, request.getSize() + 1);
+
+        List<User> users;
+        if (request.getCursorId() == null) {
+            users = userRepository.findByUsernameContainingOfFirstPage(keyword, pageable);
+        } else {
+            users = userRepository.findByUsernameContainingOfNextPage(keyword, request.getCursorId(), pageable);
         }
-        logger.debug("Found {} user(s) matching keyword={}", profileDTOS.size(), keyword);
-        return profileDTOS;
+
+        boolean hasNext = users.size() > request.getSize();
+        if (hasNext) {
+            users = users.subList(0, request.getSize());
+        }
+
+        List<OtherProfileDTO> profileDTOs = new ArrayList<>();
+        for (User user : users) {
+            profileDTOs.add(UserMapper.mapUserToOtherUserDTO(user));
+        }
+
+        Long nextCursor = null;
+        if (!users.isEmpty()) {
+            nextCursor = users.get(users.size() - 1).getId();
+        }
+
+        CursorPaginationResponse<List<OtherProfileDTO>, Long> response =
+                new CursorPaginationResponse<>(profileDTOs, null, nextCursor, hasNext);
+
+        logger.debug("Found {} user(s) matching keyword={}", profileDTOs.size(), keyword);
+        return response;
     }
 
     public void changeActiveStatusForUser(Long requesterId, Long id){
@@ -168,30 +215,108 @@ public class AdminService {
 
     //CHATBOX
 
-    public List<ChatBoxDTO> getAllChatBox(Long requesterId){
+    public CursorPaginationResponse<List<ChatBoxDTO>, Long> getAllChatBox(Long requesterId, CursorPaginationRequest<Long> request) {
         validateAdminAccess(requesterId);
         logger.debug("Fetching all chatboxes");
-        List<ChatBox> chatBoxes=chatBoxRepository.findAll();
-        List<ChatBoxDTO> chatBoxDTOS=new ArrayList<>();
-        for(ChatBox chatBox:chatBoxes){
-            ChatBoxDTO chatBoxDTO= ChatBoxMapper.mapChatBoxToChatBoxDTO(chatBox);
-            chatBoxDTOS.add(chatBoxDTO);
+
+        Pageable pageable = PageRequest.of(0, request.getSize() + 1);
+
+        List<ChatBox> chatBoxes;
+        if (request.getCursorId() == null) {
+            chatBoxes = chatBoxRepository.findAllOfFirstPage(pageable);
+        } else {
+            chatBoxes = chatBoxRepository.findAllOfNextPage(request.getCursorId(), pageable);
         }
-        logger.debug("Found {} chatbox(es)", chatBoxDTOS.size());
-        return chatBoxDTOS;
+
+        boolean hasNext = chatBoxes.size() > request.getSize();
+        if (hasNext) {
+            chatBoxes = chatBoxes.subList(0, request.getSize());
+        }
+
+        Set<Long> chatBoxIds = chatBoxes.stream()
+                .map(ChatBox::getId)
+                .collect(Collectors.toSet());
+
+        List<ChatBox> confirmedChatBoxes = chatBoxIds.isEmpty()
+                ? List.of()
+                : chatBoxRepository.findByIdInWithUsers(new ArrayList<>(chatBoxIds));
+
+        Map<Long, ChatBox> confirmedChatBoxMap = confirmedChatBoxes.stream()
+                .collect(Collectors.toMap(ChatBox::getId, cb -> cb));
+
+        List<ChatBoxDTO> chatBoxDTOs = new ArrayList<>();
+        for (ChatBox chatBox : chatBoxes) {
+            ChatBox confirmed = confirmedChatBoxMap.get(chatBox.getId());
+            if (confirmed != null) {
+                chatBoxDTOs.add(ChatBoxMapper.mapChatBoxToChatBoxDTO(confirmed));
+            }
+        }
+
+        Long nextCursor = null;
+        if (!chatBoxes.isEmpty()) {
+            nextCursor = chatBoxes.get(chatBoxes.size() - 1).getId();
+        }
+
+        CursorPaginationResponse<List<ChatBoxDTO>, Long> response =
+                new CursorPaginationResponse<>(chatBoxDTOs, null, nextCursor, hasNext);
+
+        logger.debug("Found {} chatbox(es)", chatBoxDTOs.size());
+        return response;
     }
 
-    public List<ChatBoxDTO> getAllUserChatBox(Long requesterId, Long userId){
+    public CursorPaginationResponse<List<ChatBoxDTO>, Long> getAllUserChatBox(
+            Long requesterId, Long userId, CursorPaginationRequest<Long> request) {
+
         validateAdminAccess(requesterId);
         logger.debug("Fetching all chatboxes for userId={}", userId);
-        List<ChatBox> chatBoxes=chatBoxRepository.findByUserIdOrderByLastActiveTimeDesc(userId);
-        List<ChatBoxDTO> chatBoxDTOS=new ArrayList<>();
-        for(ChatBox chatBox:chatBoxes){
-            ChatBoxDTO chatBoxDTO= ChatBoxMapper.mapChatBoxToChatBoxDTO(chatBox);
-            chatBoxDTOS.add(chatBoxDTO);
+
+        Pageable pageable = PageRequest.of(0, request.getSize() + 1);
+
+        List<ChatBox> chatBoxes;
+        if (request.getCursorTimestamp() == null) {
+            chatBoxes = chatBoxRepository.findByUserIdOfFirstPage(userId, pageable);
+        } else {
+            chatBoxes = chatBoxRepository.findByUserIdOfNextPage(
+                    userId, request.getCursorTimestamp(), request.getCursorId(), pageable);
         }
-        logger.debug("Found {} chatbox(es) for userId={}", chatBoxDTOS.size(), userId);
-        return chatBoxDTOS;
+
+        boolean hasNext = chatBoxes.size() > request.getSize();
+        if (hasNext) {
+            chatBoxes = chatBoxes.subList(0, request.getSize());
+        }
+
+        Set<Long> chatBoxIds = chatBoxes.stream()
+                .map(ChatBox::getId)
+                .collect(Collectors.toSet());
+
+        List<ChatBox> confirmedChatBoxes = chatBoxIds.isEmpty()
+                ? List.of()
+                : chatBoxRepository.findByIdInWithUsers(new ArrayList<>(chatBoxIds));
+
+        Map<Long, ChatBox> confirmedChatBoxMap = confirmedChatBoxes.stream()
+                .collect(Collectors.toMap(ChatBox::getId, cb -> cb));
+
+        List<ChatBoxDTO> chatBoxDTOs = new ArrayList<>();
+        for (ChatBox chatBox : chatBoxes) {
+            ChatBox confirmed = confirmedChatBoxMap.get(chatBox.getId());
+            if (confirmed != null) {
+                chatBoxDTOs.add(ChatBoxMapper.mapChatBoxToChatBoxDTO(confirmed));
+            }
+        }
+
+        LocalDateTime nextTimestamp = null;
+        Long nextCursor = null;
+        if (!chatBoxes.isEmpty()) {
+            ChatBox lastChatBox = chatBoxes.get(chatBoxes.size() - 1);
+            nextTimestamp = lastChatBox.getLastActiveTime();
+            nextCursor = lastChatBox.getId();
+        }
+
+        CursorPaginationResponse<List<ChatBoxDTO>, Long> response =
+                new CursorPaginationResponse<>(chatBoxDTOs, nextTimestamp, nextCursor, hasNext);
+
+        logger.debug("Found {} chatbox(es) for userId={}", chatBoxDTOs.size(), userId);
+        return response;
     }
 
     //STATISTICS

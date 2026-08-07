@@ -1,5 +1,7 @@
 package com.tuan.chatserver.controller;
 
+import com.tuan.chatserver.dto.CursorPaginationRequest;
+import com.tuan.chatserver.dto.CursorPaginationResponse;
 import com.tuan.chatserver.dto.DirectMessageDTO;
 import com.tuan.chatserver.security.CustomUserDetails;
 import com.tuan.chatserver.service.DirectMessageService;
@@ -19,9 +21,9 @@ public class DirectMessageController {
     }
 
     @GetMapping
-    public ResponseEntity<List<DirectMessageDTO>> getAllPrivateChat(Authentication authentication){
+    public ResponseEntity<CursorPaginationResponse<List<DirectMessageDTO>, Long>> getAllPrivateChat(Authentication authentication, CursorPaginationRequest request){
         Long userId = ((CustomUserDetails) authentication.getPrincipal()).getPerson().getId();
-        List<DirectMessageDTO> dtos = directMessageService.getAllChatByUserId(userId);
+        CursorPaginationResponse<List<DirectMessageDTO>, Long> dtos = directMessageService.getAllChatByUserId(userId, request);
         return ResponseEntity.ok(dtos);
     }
 

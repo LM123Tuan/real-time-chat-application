@@ -57,11 +57,13 @@ public class AdminController {
     //USER
 
     @GetMapping("/users")
-    public ResponseEntity<List<OtherProfileDTO>> findAllUsers(Authentication authentication, @RequestParam(required = false) String keyword) {
+    public ResponseEntity<CursorPaginationResponse<List<OtherProfileDTO>, Long>> findAllUsers(Authentication authentication,
+                                                                                              @RequestParam(required = false) String keyword,
+                                                                                              CursorPaginationRequest<Long> request) {
         Long requesterId = extractRequesterId(authentication);
-        List<OtherProfileDTO> users = (keyword == null || keyword.isBlank())
-                ? adminService.findAllUsers(requesterId)
-                : adminService.findUserByUsernameContaining(requesterId, keyword);
+        CursorPaginationResponse<List<OtherProfileDTO>, Long> users = (keyword == null || keyword.isBlank())
+                ? adminService.findAllUsers(requesterId, request)
+                : adminService.findUserByUsernameContaining(requesterId, keyword, request);
         return ResponseEntity.ok(users);
     }
 
@@ -75,16 +77,19 @@ public class AdminController {
     //CHATBOX
 
     @GetMapping("/chatboxes")
-    public ResponseEntity<List<ChatBoxDTO>> getAllChatBox(Authentication authentication) {
+    public ResponseEntity<CursorPaginationResponse<List<ChatBoxDTO>, Long>> getAllChatBox(Authentication authentication,
+                                                                                          CursorPaginationRequest<Long> request) {
         Long requesterId = extractRequesterId(authentication);
-        List<ChatBoxDTO> chatBoxes = adminService.getAllChatBox(requesterId);
+        CursorPaginationResponse<List<ChatBoxDTO>, Long> chatBoxes = adminService.getAllChatBox(requesterId, request);
         return ResponseEntity.ok(chatBoxes);
     }
 
     @GetMapping("/users/{userId}/chatboxes")
-    public ResponseEntity<List<ChatBoxDTO>> getAllUserChatBox(Authentication authentication, @PathVariable Long userId) {
+    public ResponseEntity<CursorPaginationResponse<List<ChatBoxDTO>, Long>> getAllUserChatBox(Authentication authentication,
+                                                                                              @PathVariable Long userId,
+                                                                                              CursorPaginationRequest<Long> request) {
         Long requesterId = extractRequesterId(authentication);
-        List<ChatBoxDTO> chatBoxes = adminService.getAllUserChatBox(requesterId, userId);
+        CursorPaginationResponse<List<ChatBoxDTO>, Long> chatBoxes = adminService.getAllUserChatBox(requesterId, userId, request);
         return ResponseEntity.ok(chatBoxes);
     }
 
