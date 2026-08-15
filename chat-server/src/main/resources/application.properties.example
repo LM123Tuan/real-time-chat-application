@@ -45,4 +45,9 @@ spring.security.oauth2.client.registration.google.client-id=your-google-client-i
 spring.security.oauth2.client.registration.google.client-secret=your-google-client-secret
 spring.security.oauth2.client.registration.google.scope=openid,email,profile
 
+rabbitmq.stomp.host=${RABBITMQ_STOMP_HOST}
+rabbitmq.stomp.port=${RABBITMQ_STOMP_PORT}
+rabbitmq.stomp.login=${RABBITMQ_STOMP_LOGIN}
+rabbitmq.stomp.passcode=${RABBITMQ_STOMP_PASSCODE}
+
 spring.profiles.active=dev

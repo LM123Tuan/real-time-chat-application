@@ -39,7 +39,7 @@ public class GroupChatController {
         return ResponseEntity.ok(permission);
     }
 
-    @PostMapping("/search")
+    @PostMapping
     public ResponseEntity<CursorPaginationResponse<List<GroupChatDTO>>> getAllGroupChat(Authentication authentication,
                                                                                         @RequestBody CursorPaginationRequest request){
         Long userId = ((CustomUserDetails) authentication.getPrincipal()).getPerson().getId();
@@ -56,7 +56,7 @@ public class GroupChatController {
         return ResponseEntity.ok(dtos);
     }
 
-    @PostMapping
+    @PostMapping("/create")
     public ResponseEntity<GroupChatDTO> createGroupChat(Authentication authentication,
                                                         @RequestBody Set<Long> otherIds){
         Long userId = ((CustomUserDetails) authentication.getPrincipal()).getPerson().getId();

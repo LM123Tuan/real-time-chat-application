@@ -14,10 +14,11 @@ import com.tuan.chatserver.security.CustomUserDetails;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -44,11 +45,11 @@ public class AuthService {
     private final ResetPasswordService resetPasswordService;
     private final EmailTemplateService emailTemplateService;
     private final EmailService emailService;
-    private final BCryptPasswordEncoder bCryptPasswordEncoder;
+    private final PasswordEncoder bCryptPasswordEncoder;
 
     @Autowired
     public AuthService(
-            AuthenticationManager authenticationManager,
+            @Lazy AuthenticationManager authenticationManager,
             JwtService jwtService,
             RefreshTokenService refreshTokenService,
             PersonRepository personRepository,
@@ -57,7 +58,7 @@ public class AuthService {
             ResetPasswordService resetPasswordService,
             EmailTemplateService emailTemplateService,
             EmailService emailService,
-            BCryptPasswordEncoder bCryptPasswordEncoder
+            PasswordEncoder bCryptPasswordEncoder
     ){
         this.authenticationManager=authenticationManager;
         this.jwtService=jwtService;
