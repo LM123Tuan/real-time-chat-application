@@ -53,10 +53,13 @@ public class MessageController {
         return ResponseEntity.ok(dto);
     }
 
-    //TODO
     @PatchMapping("/messages/{messageId}/status")
-    public ResponseEntity<Void> updateMessageStatus(@PathVariable String messageId) {
-        messageService.updateMessageStatus(messageId);
+    public ResponseEntity<Void> updateMessageStatus(
+            Authentication authentication,
+            @PathVariable String messageId) {
+
+        Long requesterId = ((CustomUserDetails) authentication.getPrincipal()).getPerson().getId();
+        messageService.updateMessageStatus(requesterId, messageId);
         return ResponseEntity.noContent().build();
     }
 

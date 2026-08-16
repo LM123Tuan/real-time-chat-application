@@ -181,11 +181,13 @@ public class MessageService {
         return dto;
     }
 
-    public void updateMessageStatus(String messageId){
-        logger.info("Attempting to update message status, messageId={}", messageId);
+    public void updateMessageStatus(Long requesterId, String messageId){
+        logger.info("Attempting to update message status, requesterId={}, messageId={}", requesterId, messageId);
         Optional<Message> message=messageRepository.findById(messageId);
         if(message.isPresent()){
             Message actualMessage=message.get();
+            validateUserInChatBox(requesterId, actualMessage.getChatBoxId());
+
             MessageStatus messageStatus=actualMessage.getStatus();
             if(messageStatus == MessageStatus.SENT){
                 messageStatus=MessageStatus.RECEIVED;
@@ -198,7 +200,7 @@ public class MessageService {
             actualMessage.setStatus(messageStatus);
             try{
                 messageRepository.save(actualMessage);
-                logger.info("Message status updated successfully, messageId={}, newStatus={}", messageId, messageStatus);
+                logger.info("Message status updated successfully, requesterId={}, messageId={}, newStatus={}", requesterId, messageId, messageStatus);
             }catch(Exception e){
                 logger.error("Error occurred while updating message status, messageId={}", messageId, e);
                 throw new DataAccessFailureException(e);
