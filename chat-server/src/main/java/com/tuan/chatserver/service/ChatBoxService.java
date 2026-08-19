@@ -7,6 +7,7 @@ import com.tuan.chatserver.dto.CursorPaginationResponse;
 import com.tuan.chatserver.dto.PageCursor;
 import com.tuan.chatserver.entity.ChatBox;
 import com.tuan.chatserver.enums.ChatboxType;
+import com.tuan.chatserver.exception.ChatBoxNotFoundException;
 import com.tuan.chatserver.mapper.ChatBoxMapper;
 import com.tuan.chatserver.repository.ChatBoxRepository;
 import com.tuan.chatserver.repository.MessageRepository;
@@ -26,15 +27,18 @@ public class ChatBoxService {
 
     private final ChatBoxRepository chatBoxRepository;
     private final MessageRepository messageRepository;
+    private final MessageService messageService;
     private final CursorCodec cursorCodec;
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     @Autowired
     public ChatBoxService(ChatBoxRepository chatBoxRepository,
                           MessageRepository messageRepository,
+                          MessageService messageService,
                           CursorCodec cursorCodec) {
         this.chatBoxRepository = chatBoxRepository;
         this.messageRepository = messageRepository;
+        this.messageService = messageService;
         this.cursorCodec=cursorCodec;
     }
 
@@ -83,6 +87,8 @@ public class ChatBoxService {
                 ? List.of()
                 : chatBoxRepository.findByIdInWithUsers(new ArrayList<>(chatBoxIds));
 
+        messageService.markSentMessagesAsReceivedForChatBoxes(userId, confirmedChatBoxes);
+
         Map<Long, ChatBox> confirmedChatBoxMap = confirmedChatBoxes.stream()
                 .collect(Collectors.toMap(ChatBox::getId, cb -> cb));
 
@@ -106,5 +112,14 @@ public class ChatBoxService {
 
         logger.debug("Found {} active chatbox(es) for userId: {}", chatBoxDTOs.size(), userId);
         return response;
+    }
+
+    public ChatBox getChatBoxWithUsers(Long chatBoxId) {
+        logger.debug("Fetching chatbox with users, chatBoxId={}", chatBoxId);
+        return chatBoxRepository.findById(chatBoxId)
+                .orElseThrow(() -> {
+                    logger.warn("Validation failed: chatbox not found, chatBoxId={}", chatBoxId);
+                    return new ChatBoxNotFoundException(chatBoxId);
+                });
     }
 }

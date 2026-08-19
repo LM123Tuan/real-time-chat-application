@@ -70,8 +70,8 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(errorResponse);
     }
 
-    @ExceptionHandler(MessageAlreadySeenException.class)
-    public ResponseEntity<ErrorResponse> handleMessageAlreadySeenException(MessageAlreadySeenException e){
+    @ExceptionHandler(InvalidMessageStatusException.class)
+    public ResponseEntity<ErrorResponse> handleMessageAlreadySeenException(InvalidMessageStatusException e){
         logger.warn("Handled MessageAlreadySeenException: {}", e.getMessage());
         ErrorResponse errorResponse = new ErrorResponse(e.getMessage(), HttpStatus.CONFLICT.value(), LocalDateTime.now());
         return ResponseEntity.status(HttpStatus.CONFLICT).body(errorResponse);
@@ -152,5 +152,26 @@ public class GlobalExceptionHandler {
         logger.error("Handled EmailSendingFailureException: {}", e.getMessage(), e);
         ErrorResponse errorResponse = new ErrorResponse(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR.value(), LocalDateTime.now());
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+    }
+
+    @ExceptionHandler(AdminAccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAdminAccessDeniedException(AdminAccessDeniedException e){
+        logger.warn("Handled AdminAccessDeniedException: {}", e.getMessage());
+        ErrorResponse errorResponse = new ErrorResponse(e.getMessage(), HttpStatus.FORBIDDEN.value(), LocalDateTime.now());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(errorResponse);
+    }
+
+    @ExceptionHandler(InvalidCursorException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidCursorException(InvalidCursorException e){
+        logger.warn("Handled InvalidCursorException: {}", e.getMessage());
+        ErrorResponse errorResponse = new ErrorResponse(e.getMessage(), HttpStatus.BAD_REQUEST.value(), LocalDateTime.now());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+    }
+
+    @ExceptionHandler(UserIsNotMessageSenderException.class)
+    public ResponseEntity<ErrorResponse> handleUserIsNotMessageSenderException(UserIsNotMessageSenderException e){
+        logger.warn("Handled UserIsNotMessageSenderException: {}", e.getMessage());
+        ErrorResponse errorResponse = new ErrorResponse(e.getMessage(), HttpStatus.FORBIDDEN.value(), LocalDateTime.now());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(errorResponse);
     }
 }

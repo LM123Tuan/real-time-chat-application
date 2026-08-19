@@ -1,0 +1,15 @@
+package com.tuan.chatserver.enums;
+
+public enum EventType {
+    MESSAGE_NEW,
+    MESSAGE_STATUS_UPDATED,
+    MESSAGE_RECALLED,
+    GROUP_CHAT_CREATED,
+    GROUP_RENAMED,
+    MEMBER_ADDED,
+    MEMBER_REMOVED,
+    MEMBER_LEFT,
+    ADDED_TO_GROUP,
+    REMOVED_FROM_GROUP,
+    ROLE_CHANGED,
+}

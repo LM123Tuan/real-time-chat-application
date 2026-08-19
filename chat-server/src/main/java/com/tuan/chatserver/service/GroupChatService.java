@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.tuan.chatserver.dto.*;
 import com.tuan.chatserver.entity.GroupChat;
 import com.tuan.chatserver.entity.User;
+import com.tuan.chatserver.enums.EventType;
 import com.tuan.chatserver.enums.GroupChatPermission;
 import com.tuan.chatserver.exception.*;
 import com.tuan.chatserver.mapper.GroupChatMapper;
@@ -15,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -28,14 +30,17 @@ public class GroupChatService {
     private final GroupChatRepository groupChatRepository;
     private final UserRepository userRepository;
     private final CursorCodec cursorCodec;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @Autowired
     public GroupChatService(GroupChatRepository groupChatRepository,
                             UserRepository userRepository,
-                            CursorCodec cursorCodec) {
+                            CursorCodec cursorCodec,
+                            SimpMessagingTemplate messagingTemplate) {
         this.groupChatRepository = groupChatRepository;
         this.userRepository = userRepository;
-        this.cursorCodec=cursorCodec;
+        this.cursorCodec = cursorCodec;
+        this.messagingTemplate = messagingTemplate;
     }
 
     private GroupChat mapOptionalGroupChatToEntity(Long groupChatId){
@@ -89,6 +94,13 @@ public class GroupChatService {
                 groupChatRepository.save(groupChat);
                 logger.info("Group chat created successfully, id={}, name={}", groupChat.getId(), name);
                 GroupChatDTO dto = GroupChatMapper.mapGroupChatToGroupChatDTO(groupChat);
+
+                for (Long otherId : otherUserIds) {
+                    messagingTemplate.convertAndSendToUser(
+                            otherId.toString(), "/queue/notifications",
+                            new ChatEvent<>(EventType.GROUP_CHAT_CREATED, dto));
+                }
+
                 return dto;
             }catch (Exception e){
                 logger.error("Error occurred while creating group chat", e);
@@ -112,6 +124,10 @@ public class GroupChatService {
         try{
             groupChatRepository.save(groupChat);
             logger.info("Group chat renamed successfully, groupChatId={}", groupChatId);
+
+            messagingTemplate.convertAndSend(
+                    "/topic/chatbox/" + groupChatId,
+                    new ChatEvent<>(EventType.GROUP_RENAMED, newName));
         }catch (Exception e){
             logger.error("Error occurred while renaming group chat, groupChatId={}", groupChatId, e);
             throw new DataAccessFailureException(e);
@@ -149,6 +165,16 @@ public class GroupChatService {
                 try{
                     groupChatRepository.save(groupChat);
                     logger.info("Member added to group successfully, groupChatId={}, memberIds={}", groupChatId, otherUserIds);
+
+                    messagingTemplate.convertAndSend(
+                            "/topic/chatbox/" + groupChatId,
+                            new ChatEvent<>(EventType.MEMBER_ADDED, otherUserIds));
+
+                    for (Long newMemberId : otherUserIds) {
+                        messagingTemplate.convertAndSendToUser(
+                                newMemberId.toString(), "/queue/notifications",
+                                new ChatEvent<>(EventType.ADDED_TO_GROUP, groupChatId));
+                    }
                 }catch (Exception e){
                     logger.error("Error occurred while adding member to group, groupChatId={}, memberId={}", groupChatId, otherUserIds, e);
                     throw new DataAccessFailureException(e);
@@ -196,6 +222,14 @@ public class GroupChatService {
             try{
                 groupChatRepository.save(groupChat);
                 logger.info("Member removed from group successfully, groupChatId={}, memberId={}", groupChatId, memberId);
+
+                messagingTemplate.convertAndSend(
+                        "/topic/chatbox/" + groupChatId,
+                        new ChatEvent<>(EventType.MEMBER_REMOVED, memberId));
+
+                messagingTemplate.convertAndSendToUser(
+                        memberId.toString(), "/queue/notifications",
+                        new ChatEvent<>(EventType.REMOVED_FROM_GROUP, groupChatId));
             }catch (Exception e){
                 logger.error("Error occurred while removing member from group, groupChatId={}, memberId={}", groupChatId, memberId, e);
                 throw new DataAccessFailureException(e);
@@ -241,6 +275,10 @@ public class GroupChatService {
         try{
             groupChatRepository.save(groupChat);
             logger.info("User left group chat successfully, requesterId={}, groupChatId={}", requesterId, groupChatId);
+
+            messagingTemplate.convertAndSend(
+                    "/topic/chatbox/" + groupChatId,
+                    new ChatEvent<>(EventType.MEMBER_LEFT, requesterId));
         }catch (Exception e){
             logger.error("Error occurred while leaving group chat, requesterId={}, groupChatId={}", requesterId, groupChatId, e);
             throw new DataAccessFailureException(e);
@@ -345,6 +383,10 @@ public class GroupChatService {
         try{
             groupChatRepository.save(groupChat);
             logger.info("Member promoted to vice leader successfully, groupChatId={}, nomineeId={}", groupChatId, nomineeId);
+
+            messagingTemplate.convertAndSend(
+                    "/topic/chatbox/" + groupChatId,
+                    new ChatEvent<>(EventType.ROLE_CHANGED, nomineeId));
         }catch(Exception e){
             logger.error("Error occurred while promoting member to vice leader, groupChatId={}, nomineeId={}", groupChatId, nomineeId, e);
             throw new DataAccessFailureException(e);
@@ -383,6 +425,10 @@ public class GroupChatService {
         try{
             groupChatRepository.save(groupChat);
             logger.info("Member promoted to leader successfully, groupChatId={}, nomineeId={}, fromViceLeader={}", groupChatId, nomineeId, wasViceLeader);
+
+            messagingTemplate.convertAndSend(
+                    "/topic/chatbox/" + groupChatId,
+                    new ChatEvent<>(EventType.ROLE_CHANGED, nomineeId));
         }catch(Exception e){
             logger.error("Error occurred while promoting member to leader, groupChatId={}, nomineeId={}", groupChatId, nomineeId, e);
             throw new DataAccessFailureException(e);
@@ -418,6 +464,10 @@ public class GroupChatService {
         try{
             groupChatRepository.save(groupChat);
             logger.info("Leader demoted to vice leader successfully, groupChatId={}, nomineeId={}", groupChatId, nomineeId);
+
+            messagingTemplate.convertAndSend(
+                    "/topic/chatbox/" + groupChatId,
+                    new ChatEvent<>(EventType.ROLE_CHANGED, nomineeId));
         }catch(Exception e){
             logger.error("Error occurred while demoting leader to vice leader, groupChatId={}, nomineeId={}", groupChatId, nomineeId, e);
             throw new DataAccessFailureException(e);
@@ -455,6 +505,10 @@ public class GroupChatService {
         try{
             groupChatRepository.save(groupChat);
             logger.info("Member demoted to regular user successfully, groupChatId={}, nomineeId={}", groupChatId, nomineeId);
+
+            messagingTemplate.convertAndSend(
+                    "/topic/chatbox/" + groupChatId,
+                    new ChatEvent<>(EventType.ROLE_CHANGED, nomineeId));
         }catch(Exception e){
             logger.error("Error occurred while demoting member to user, groupChatId={}, nomineeId={}", groupChatId, nomineeId, e);
             throw new DataAccessFailureException(e);

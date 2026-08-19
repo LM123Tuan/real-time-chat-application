@@ -1,5 +1,6 @@
 package com.tuan.chatserver.service;
 
+import com.mongodb.client.result.UpdateResult;
 import com.tuan.chatserver.document.Message;
 import com.tuan.chatserver.dto.CursorPaginationRequest;
 import com.tuan.chatserver.dto.CursorPaginationResponse;
@@ -21,6 +22,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.MongoTransactionManager;
@@ -41,6 +46,7 @@ public class MessageService {
     private final MongoTransactionManager mongoTransactionManager;
     private final MessageMapper messageMapper;
     private final CursorCodec cursorCodec;
+    private final MongoTemplate mongoTemplate;
 
     @Autowired
     public MessageService(MessageRepository messageRepository,
@@ -48,13 +54,15 @@ public class MessageService {
                           UserRepository userRepository,
                           MongoTransactionManager mongoTransactionManager,
                           MessageMapper messageMapper,
-                          CursorCodec cursorCodec) {
+                          CursorCodec cursorCodec,
+                          MongoTemplate mongoTemplate) {
         this.messageRepository = messageRepository;
         this.chatBoxRepository = chatBoxRepository;
         this.userRepository = userRepository;
         this.mongoTransactionManager = mongoTransactionManager;
         this.messageMapper = messageMapper;
         this.cursorCodec = cursorCodec;
+        this.mongoTemplate = mongoTemplate;
     }
 
     @Transactional(readOnly = true)
@@ -181,33 +189,80 @@ public class MessageService {
         return dto;
     }
 
-    public void updateMessageStatus(Long requesterId, String messageId){
-        logger.info("Attempting to update message status, requesterId={}, messageId={}", requesterId, messageId);
-        Optional<Message> message=messageRepository.findById(messageId);
-        if(message.isPresent()){
-            Message actualMessage=message.get();
-            validateUserInChatBox(requesterId, actualMessage.getChatBoxId());
+    public void markMessageAsReceived(Long requesterId, String messageId) {
+        logger.info("Attempting to mark message as RECEIVED, requesterId={}, messageId={}", requesterId, messageId);
+        Message actualMessage = messageRepository.findById(messageId)
+                .orElseThrow(() -> {
+                    logger.warn("Mark message as RECEIVED failed: message not found, messageId={}", messageId);
+                    return new MessageNotExistsException(messageId);
+                });
 
-            MessageStatus messageStatus=actualMessage.getStatus();
-            if(messageStatus == MessageStatus.SENT){
-                messageStatus=MessageStatus.RECEIVED;
-            }else if(messageStatus == MessageStatus.RECEIVED){
-                messageStatus=MessageStatus.SEEN;
-            }else if(messageStatus == MessageStatus.SEEN){
-                logger.warn("Update message status failed: message already at SEEN status, messageId={}", messageId);
-                throw new MessageAlreadySeenException(messageId);
-            }
-            actualMessage.setStatus(messageStatus);
-            try{
-                messageRepository.save(actualMessage);
-                logger.info("Message status updated successfully, requesterId={}, messageId={}, newStatus={}", requesterId, messageId, messageStatus);
-            }catch(Exception e){
-                logger.error("Error occurred while updating message status, messageId={}", messageId, e);
-                throw new DataAccessFailureException(e);
-            }
-        }else{
-            logger.warn("Update message status failed: message not found, messageId={}", messageId);
-            throw new MessageNotExistsException(messageId);
+        validateUserInChatBox(requesterId, actualMessage.getChatBoxId());
+
+        if (actualMessage.getStatus() != MessageStatus.SENT) {
+            logger.warn("Mark message as RECEIVED failed: message not at SENT status, messageId={}, currentStatus={}",
+                    messageId, actualMessage.getStatus());
+            throw new InvalidMessageStatusException(messageId, actualMessage.getStatus());
+        }
+
+        actualMessage.setStatus(MessageStatus.RECEIVED);
+        try {
+            messageRepository.save(actualMessage);
+            logger.info("Message marked as RECEIVED successfully, requesterId={}, messageId={}", requesterId, messageId);
+        } catch (Exception e) {
+            logger.error("Error occurred while marking message as RECEIVED, messageId={}", messageId, e);
+            throw new DataAccessFailureException(e);
+        }
+    }
+
+    public void markMessageAsSeen(Long requesterId, String messageId) {
+        logger.info("Attempting to mark message as SEEN, requesterId={}, messageId={}", requesterId, messageId);
+        Message actualMessage = messageRepository.findById(messageId)
+                .orElseThrow(() -> {
+                    logger.warn("Mark message as SEEN failed: message not found, messageId={}", messageId);
+                    return new MessageNotExistsException(messageId);
+                });
+
+        validateUserInChatBox(requesterId, actualMessage.getChatBoxId());
+
+        if (actualMessage.getStatus() == MessageStatus.SEEN) {
+            logger.warn("Mark message as SEEN failed: message already at SEEN status, messageId={}", messageId);
+            throw new InvalidMessageStatusException(messageId);
+        }
+
+        actualMessage.setStatus(MessageStatus.SEEN);
+        try {
+            messageRepository.save(actualMessage);
+            logger.info("Message marked as SEEN successfully, requesterId={}, messageId={}", requesterId, messageId);
+        } catch (Exception e) {
+            logger.error("Error occurred while marking message as SEEN, messageId={}", messageId, e);
+            throw new DataAccessFailureException(e);
+        }
+    }
+
+    void markSentMessagesAsReceivedForChatBoxes(Long requesterId, List<ChatBox> chatBoxes) {
+        if (chatBoxes.isEmpty()) {
+            return;
+        }
+
+        List<Long> chatBoxIds = chatBoxes.stream()
+                .map(ChatBox::getId)
+                .toList();
+
+        logger.debug("Marking SENT messages as RECEIVED, requesterId={}, chatBoxCount={}",
+                requesterId, chatBoxIds.size());
+
+        Query query = new Query(Criteria.where("chatBoxId").in(chatBoxIds)
+                .and("status").is(MessageStatus.SENT)
+                .and("senderId").ne(requesterId));
+        Update update = new Update().set("status", MessageStatus.RECEIVED);
+
+        try {
+            UpdateResult result = mongoTemplate.updateMulti(query, update, Message.class);
+            logger.info("Marked {} message(s) as RECEIVED, requesterId={}", result.getModifiedCount(), requesterId);
+        } catch (Exception e) {
+            logger.error("Error occurred while marking messages as RECEIVED, requesterId={}", requesterId, e);
+            throw new DataAccessFailureException(e);
         }
     }
 
@@ -285,6 +340,8 @@ public class MessageService {
             messages = messages.subList(0, request.getSize());
         }
 
+        markReceivedMessagesAsSeen(userId, chatBoxId, messages);
+
         List<MessageDTO> dtos = mapToDTOList(messages);
 
         String nextCursor = null;
@@ -299,5 +356,30 @@ public class MessageService {
 
         logger.debug("Found {} message(s) for chatBoxId={}", dtos.size(), chatBoxId);
         return response;
+    }
+
+    private void markReceivedMessagesAsSeen(Long requesterId, Long chatBoxId, List<Message> messages) {
+        if (messages.isEmpty()) {
+            return;
+        }
+        logger.debug("Marking messages as SEEN, requesterId={}, chatBoxId={}, messageCount={}",
+                requesterId, chatBoxId, messages.size());
+
+        validateUserInChatBox(requesterId, chatBoxId);
+
+        for (Message message : messages) {
+            if (message.getStatus() != MessageStatus.SEEN && !message.getSenderId().equals(requesterId)) {
+                message.setStatus(MessageStatus.SEEN);
+            }
+        }
+
+        try {
+            messageRepository.saveAll(messages);
+            logger.info("Marked message(s) as SEEN, requesterId={}, chatBoxId={}", requesterId, chatBoxId);
+        } catch (Exception e) {
+            logger.error("Error occurred while marking messages as SEEN, requesterId={}, chatBoxId={}",
+                    requesterId, chatBoxId, e);
+            throw new DataAccessFailureException(e);
+        }
     }
 }
