@@ -12,6 +12,8 @@ import com.tuan.chatserver.repository.PersonRepository;
 import com.tuan.chatserver.repository.UserRepository;
 import com.tuan.chatserver.security.CustomUserDetails;
 import jakarta.transaction.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
@@ -36,6 +38,7 @@ public class AuthService {
     private static final Duration EXCHANGE_TOKEN_TTL = Duration.ofSeconds(30);
     private static final String RESET_PASSWORD_URL = "/api/auth/confirm-reset-password?token=";
 
+    private final Logger logger = LoggerFactory.getLogger(this.getClass());
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
@@ -77,20 +80,24 @@ public class AuthService {
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(loginRequest.getIdentifier(), loginRequest.getPassword()));
         CustomUserDetails userDetails= (CustomUserDetails) authentication.getPrincipal();
-        Person person = userDetails.getPerson();
+        Long id = userDetails.getPerson().getId();
 
-        person.setTokenVersion(person.getTokenVersion() + 1);
-        personRepository.save(person);
+        int updatedRows = personRepository.incrementTokenVersion(id);
+        if (updatedRows == 0) {
+            logger.warn("incrementTokenVersion affected 0 rows for userId={}", id);
+        }
 
-        UserRole role = (person instanceof Admin) ? UserRole.ADMIN : UserRole.USER;
-        String accessToken = jwtService.generateAccessToken(person.getId(), person.getUsername(), role, person.getTokenVersion());
-        RefreshToken refreshToken = refreshTokenService.createRefreshToken(person);
-        PersonDTO personDTO=new PersonDTO(person.getId(), person.getUsername(), person.getRole(), person.isActive());
+        Person updatedPerson = personRepository.findById(id)
+                .orElseThrow(() -> new UserNotFoundException(id));
+        UserRole role = (updatedPerson instanceof Admin) ? UserRole.ADMIN : UserRole.USER;
+        String accessToken = jwtService.generateAccessToken(updatedPerson.getId(), updatedPerson.getUsername(), role, updatedPerson.getTokenVersion());
+        RefreshToken refreshToken = refreshTokenService.createRefreshToken(updatedPerson);
+        PersonDTO personDTO=new PersonDTO(updatedPerson.getId(), updatedPerson.getUsername(), updatedPerson.getRole(), updatedPerson.isActive());
         return new LoginResponse(personDTO, accessToken, refreshToken.getToken());
     }
 
     @Transactional
-    public String loginWithGoogle(OidcUser oidcUser){
+    public String loginWithGoogle(OidcUser oidcUser) {
         String googleId = oidcUser.getSubject();
         String email = oidcUser.getEmail();
         String fullname = oidcUser.getFullName();
@@ -103,14 +110,14 @@ public class AuthService {
         } while (userRepository.existsByUsername(username));
         //String avatar = oidcUser.getPicture();
 
-        Optional<User> optionalUser=userRepository.findByProviderAndProviderId(AuthProvider.GOOGLE, googleId);
+        Optional<User> optionalUser = userRepository.findByProviderAndProviderId(AuthProvider.GOOGLE, googleId);
         User user;
-        if(optionalUser.isPresent()){
-            user=optionalUser.get();
-        }else{
-            Optional<User> checkUser=userRepository.findByEmail(email);
-            if(checkUser.isPresent()){
-                if (!checkUser.get().getProvider().equals(AuthProvider.GOOGLE)){
+        if (optionalUser.isPresent()) {
+            user = optionalUser.get();
+        } else {
+            Optional<User> checkUser = userRepository.findByEmail(email);
+            if (checkUser.isPresent()) {
+                if (!checkUser.get().getProvider().equals(AuthProvider.GOOGLE)) {
                     throw new UserNotFoundException(email);
                 }
             }
@@ -118,15 +125,20 @@ public class AuthService {
             userRepository.save(user);
         }
 
-        user.setTokenVersion(user.getTokenVersion() + 1);
+        int updatedRows = personRepository.incrementTokenVersion(user.getId());
+        if (updatedRows == 0) {
+            logger.warn("incrementTokenVersion affected 0 rows for userId={}", user.getId());
+        }
 
-        String accessToken = jwtService.generateAccessToken(user.getId(), user.getUsername(), user.getRole(), user.getTokenVersion());
-        RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
-        PersonDTO personDTO=new PersonDTO(user.getId(), user.getUsername(), user.getRole(), user.isActive());
+        User updatedUser = userRepository.findById(user.getId())
+                .orElseThrow(() -> new UserNotFoundException(user.getId()));
+        String accessToken = jwtService.generateAccessToken(updatedUser.getId(), updatedUser.getUsername(), updatedUser.getRole(), updatedUser.getTokenVersion());
+        RefreshToken refreshToken = refreshTokenService.createRefreshToken(updatedUser);
+        PersonDTO personDTO = new PersonDTO(updatedUser.getId(), updatedUser.getUsername(), updatedUser.getRole(), updatedUser.isActive());
         LoginResponse loginResponse = new LoginResponse(personDTO, accessToken, refreshToken.getToken());
 
         String exchangeToken = UUID.randomUUID().toString();
-        redisService.set("exchange:"+exchangeToken, loginResponse, EXCHANGE_TOKEN_TTL);
+        redisService.set("exchange:" + exchangeToken, loginResponse, EXCHANGE_TOKEN_TTL);
         return exchangeToken;
     }
 
