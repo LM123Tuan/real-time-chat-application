@@ -18,6 +18,7 @@ import jakarta.transaction.Transactional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -94,12 +95,16 @@ public class DirectMessageService {
             users.add(creator);
             users.add(receiver);
             String name = creator.getUsername() + " & " + receiver.getUsername();
-            DirectMessage directMessage=new DirectMessage(name, LocalDateTime.now(), users, true, LocalDateTime.now());
+            String conversationKey=smallerId + "_" + largerId;
+            DirectMessage directMessage=new DirectMessage(name, LocalDateTime.now(), users, true, LocalDateTime.now(), conversationKey);
             directMessageRepository.save(directMessage);
             logger.info("Create direct message successful between userId: {} and userId: {}", creatorId, receiverId);
             return directMessage;
         }catch (ChatBoxAlreadyExistsException e) {
             throw e;
+        }catch (DataIntegrityViolationException e) {
+            logger.warn("Create direct message failed - constraint violation, likely race condition between userId: {} and userId: {}", creatorId, receiverId);
+            throw new ChatBoxAlreadyExistsException();
         }catch (Exception e) {
             logger.error("Create direct message failed while saving between userId: {} and userId: {}", creatorId, receiverId, e);
             throw new DataAccessFailureException(e);
