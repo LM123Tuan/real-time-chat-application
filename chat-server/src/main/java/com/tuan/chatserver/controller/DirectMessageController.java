@@ -29,16 +29,16 @@ public class DirectMessageController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<DirectMessageDTO> getChatBetweenTwoUsers(Authentication authentication, @PathVariable Long id){
+    public ResponseEntity<DirectMessageDTO> getChatBetweenTwoUsersByChatBoxId(Authentication authentication, @PathVariable Long id){
         Long userId = ((CustomUserDetails) authentication.getPrincipal()).getPerson().getId();
-        DirectMessageDTO directMessageDTO = directMessageService.getChatBetweenTwoUsersByChatBoxId(id, userId);
+        DirectMessageDTO directMessageDTO = directMessageService.getChatBetweenTwoUsersByChatBoxId(userId, id);
         return ResponseEntity.ok(directMessageDTO);
     }
 
     @PostMapping
     public ResponseEntity<DirectMessageDTO> createPrivateChat(Authentication authentication, @RequestBody Long otherUserId){
         Long userId = ((CustomUserDetails) authentication.getPrincipal()).getPerson().getId();
-        DirectMessageDTO directMessageDTO = directMessageService.createDirectMessage(userId, otherUserId);
+        DirectMessageDTO directMessageDTO = directMessageService.getChatBetweenTwoUsersByUserIds(userId, otherUserId);
         return ResponseEntity.ok(directMessageDTO);
     }
 }

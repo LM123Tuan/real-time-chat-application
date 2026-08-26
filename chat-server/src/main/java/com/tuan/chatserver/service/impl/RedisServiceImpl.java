@@ -114,4 +114,23 @@ public class RedisServiceImpl implements RedisService {
             throw new DataAccessFailureException(e);
         }
     }
+
+    @Override
+    public <T> boolean setIfAbsent(String key, T value, Duration ttl){
+        logger.info("Attempting to acquire lock in Redis, key={}, ttl={}", key, ttl);
+        try{
+            Boolean acquired = redisTemplate.opsForValue().setIfAbsent(key, value, ttl);
+            boolean result = Boolean.TRUE.equals(acquired);
+
+            if(result){
+                logger.info("Successfully acquired lock in Redis, key={}", key);
+            } else {
+                logger.info("Failed to acquire lock in Redis, key already exists, key={}", key);
+            }
+            return result;
+        }catch(DataAccessException e){
+            logger.error("Failed to acquire lock in Redis, key={}", key, e);
+            throw new DataAccessFailureException(e);
+        }
+    }
 }

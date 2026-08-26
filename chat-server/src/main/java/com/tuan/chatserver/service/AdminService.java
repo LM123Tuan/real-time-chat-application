@@ -5,10 +5,8 @@ import com.tuan.chatserver.dto.*;
 import com.tuan.chatserver.entity.Admin;
 import com.tuan.chatserver.entity.ChatBox;
 import com.tuan.chatserver.entity.User;
-import com.tuan.chatserver.exception.AdminAccessDeniedException;
-import com.tuan.chatserver.exception.DataAccessFailureException;
-import com.tuan.chatserver.exception.UserNotFoundException;
-import com.tuan.chatserver.exception.UsernameOrEmailAlreadyExistsException;
+import com.tuan.chatserver.enums.EntityType;
+import com.tuan.chatserver.exception.*;
 import com.tuan.chatserver.mapper.AdminMapper;
 import com.tuan.chatserver.mapper.ChatBoxMapper;
 import com.tuan.chatserver.mapper.UserMapper;
@@ -18,11 +16,14 @@ import com.tuan.chatserver.repository.MessageRepository;
 import com.tuan.chatserver.repository.UserRepository;
 import com.tuan.chatserver.util.CursorCodec;
 import com.fasterxml.jackson.core.type.TypeReference;
+import jakarta.transaction.Transactional;
+import org.hibernate.PessimisticLockException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -201,24 +202,24 @@ public class AdminService {
         return response;
     }
 
-    public void changeActiveStatusForUser(Long requesterId, Long id){
+    @Transactional
+    public void changeActiveStatusForUser(Long requesterId, Long id, boolean newStatus) {
         validateAdminAccess(requesterId);
-        logger.info("Attempting to change active status for user, id={}", id);
-        Optional<User> user = userRepository.findById(id);
-        if (user.isPresent()) {
-            User actualUser = user.get();
-            actualUser.setActive(!actualUser.isActive());
-            try{
-                userRepository.save(actualUser);
-                logger.info("Active status changed successfully, id={}, newStatus={}", id, actualUser.isActive());
-            }catch (Exception e){
-                logger.error("Error occurred while changing active status for user, id={}", id, e);
-                throw new DataAccessFailureException(e);
-            }
-        }else{
-            logger.warn("Change active status failed: user not found, id={}", id);
-            throw new UserNotFoundException(id);
+
+        User user;
+        try {
+            user = userRepository.findByIdForUpdate(id)
+                    .orElseThrow(() -> new UserNotFoundException(id));
+        } catch (PessimisticLockException | jakarta.persistence.LockTimeoutException e) {
+            throw new LockTimeoutException(EntityType.USER, id);
         }
+
+        if (user.isActive() == newStatus) {
+            throw new InvalidRequestException("User already has the requested active status, userId= "+id+", status= "+newStatus);
+        }
+
+        user.setActive(newStatus);
+        userRepository.save(user);
     }
 
     //CHATBOX

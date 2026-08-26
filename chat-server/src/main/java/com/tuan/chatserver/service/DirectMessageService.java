@@ -7,46 +7,65 @@ import com.tuan.chatserver.dto.DirectMessageDTO;
 import com.tuan.chatserver.dto.PageCursor;
 import com.tuan.chatserver.entity.DirectMessage;
 import com.tuan.chatserver.entity.User;
-import com.tuan.chatserver.exception.DataAccessFailureException;
-import com.tuan.chatserver.exception.UserNotFoundException;
-import com.tuan.chatserver.exception.UserNotInChatBoxException;
+import com.tuan.chatserver.enums.EntityType;
+import com.tuan.chatserver.exception.*;
 import com.tuan.chatserver.mapper.DirectMessageMapper;
-import com.tuan.chatserver.exception.ChatBoxAlreadyExistsException;
 import com.tuan.chatserver.repository.DirectMessageRepository;
 import com.tuan.chatserver.repository.MessageRepository;
 import com.tuan.chatserver.repository.UserRepository;
 import com.tuan.chatserver.util.CursorCodec;
+import jakarta.transaction.Transactional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
 public class DirectMessageService {
+    private static final String PRIVATE_CHAT_KEY_PREFIX = "privatechatkey:";
+    private static final Duration CREATE_PRIVATE_CHAT_TTL = Duration.ofSeconds(5);
+    private final RedisScript<Long> UNLOCK_SCRIPT = RedisScript.of(
+            "if redis.call('GET', KEYS[1]) == ARGV[1] " +
+                    "then " +
+                        "return redis.call('DEL', KEYS[1]) " +
+                    "else " +
+                        "return 0 " +
+                    "end",
+            Long.class
+    );
+    private final RedisTemplate<String, Object> redisTemplate;
     private final DirectMessageRepository directMessageRepository;
     private final UserRepository userRepository;
     private final MessageRepository messageRepository;
     private final CursorCodec cursorCodec;
+    private final RedisService redisService;
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     @Autowired
     public DirectMessageService(DirectMessageRepository directMessageRepository,
                                 UserRepository userRepository,
                                 MessageRepository messageRepository,
-                                CursorCodec cursorCodec) {
+                                CursorCodec cursorCodec,
+                                RedisService redisService,
+                                RedisTemplate<String, Object> redisTemplate) {
         this.directMessageRepository = directMessageRepository;
         this.userRepository = userRepository;
         this.messageRepository = messageRepository;
         this.cursorCodec=cursorCodec;
+        this.redisService=redisService;
+        this.redisTemplate=redisTemplate;
     }
 
-    public DirectMessageDTO createDirectMessage(Long creatorId, Long receiverId) {
+    private DirectMessage createDirectMessageIfNotExists(Long creatorId, Long receiverId) {
         logger.info("Create direct message attempt between userId: {} and userId: {}", creatorId, receiverId);
         User creator = userRepository.findById(creatorId).orElseThrow(() -> {
             logger.warn("Create direct message failed - creator not found: creatorId={}", creatorId);
@@ -56,41 +75,68 @@ public class DirectMessageService {
             logger.warn("Create direct message failed - receiver not found: receiverId={}", receiverId);
             throw new UserNotFoundException(receiverId);
         });
-        if(directMessageRepository.existsBetweenTwoUsers(creatorId,receiverId)){
-            logger.warn("Create direct message failed - already exists between userId: {} and userId: {}", creatorId, receiverId);
-            throw new ChatBoxAlreadyExistsException();
+
+        Long smallerId = Math.min(creatorId, receiverId);
+        Long largerId = Math.max(creatorId, receiverId);
+        String lockKey = PRIVATE_CHAT_KEY_PREFIX+smallerId+","+largerId;
+        String lockValue = UUID.randomUUID().toString();
+
+        boolean acquired = redisService.setIfAbsent(lockKey, lockValue, CREATE_PRIVATE_CHAT_TTL);
+        if(!acquired){
+            throw new LockTimeoutException(EntityType.DIRECT_MESSAGE, null);
         }
-        Set<User> users=new HashSet<>();
-        users.add(creator);
-        users.add(receiver);
-        String name = creator.getUsername() + " & " + receiver.getUsername();
-        DirectMessage directMessage=new DirectMessage(name, LocalDateTime.now(), users, true, LocalDateTime.now());
         try{
+            if(directMessageRepository.existsBetweenTwoUsers(creatorId, receiverId)){
+                throw new ChatBoxAlreadyExistsException();
+            }
+
+            Set<User> users=new HashSet<>();
+            users.add(creator);
+            users.add(receiver);
+            String name = creator.getUsername() + " & " + receiver.getUsername();
+            DirectMessage directMessage=new DirectMessage(name, LocalDateTime.now(), users, true, LocalDateTime.now());
             directMessageRepository.save(directMessage);
             logger.info("Create direct message successful between userId: {} and userId: {}", creatorId, receiverId);
-            DirectMessageDTO dto = DirectMessageMapper.mapDirectMessageToDirectMessageDTO(directMessage);
-            return dto;
-        }catch(Exception e){
+            return directMessage;
+        }catch (ChatBoxAlreadyExistsException e) {
+            throw e;
+        }catch (Exception e) {
             logger.error("Create direct message failed while saving between userId: {} and userId: {}", creatorId, receiverId, e);
             throw new DataAccessFailureException(e);
+        }finally{
+            Long result = redisTemplate.execute(UNLOCK_SCRIPT, Collections.singletonList(lockKey), lockValue);
+            if (result == null || result == 0) {
+                logger.warn("Lock was not released, either already expired or held by another owner, lockKey={}", lockKey);
+            } else {
+                logger.info("Successfully released lock, lockKey={}", lockKey);
+            }
         }
     }
 
-    public DirectMessageDTO getChatBetweenTwoUsersByChatBoxId(Long userId, Long id){
+    @Transactional
+    public DirectMessageDTO getChatBetweenTwoUsersByUserIds(Long requesterId, Long receiverId) {
+        logger.info("Attempting to get direct message between users, requesterId={}, receiverId={}", requesterId, receiverId);
+
+        userRepository.findById(requesterId).orElseThrow(() -> new UserNotFoundException(requesterId));
+        userRepository.findById(receiverId).orElseThrow(() -> new UserNotFoundException(receiverId));
+
+        DirectMessage directMessage = directMessageRepository.findBetweenTwoUsers(requesterId, receiverId)
+                .orElseGet(() -> createDirectMessageIfNotExists(requesterId, receiverId));
+
+        logger.info("Successfully retrieved direct message, directMessageId={}", directMessage.getId());
+        return DirectMessageMapper.mapDirectMessageToDirectMessageDTO(directMessage);
+    }
+
+    public DirectMessageDTO getChatBetweenTwoUsersByChatBoxId(Long userId, Long id) {
         logger.debug("Fetching direct message with chatBoxId: {}", id);
-        Optional<DirectMessage> directMessage= directMessageRepository.findById(id);
-        if(directMessage.isPresent()){
-            User user = userRepository.findById(id).orElseThrow(() -> {
-                throw new UserNotFoundException(id);
-            });
-            if(!directMessage.get().getUsers().contains(user)){
-                throw new UserNotInChatBoxException(id, userId);
-            }
-            return DirectMessageMapper.mapDirectMessageToDirectMessageDTO(directMessage.get());
-        }else{
-            logger.warn("Get direct message failed - chatBoxId not found: {}", id);
-            return null;
+        DirectMessage directMessage = directMessageRepository.findById(id)
+                .orElseThrow(() -> new ChatBoxNotFoundException(id));
+
+        User user = userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException(userId));
+        if (!directMessage.getUsers().contains(user)) {
+            throw new UserNotInChatBoxException(id, userId);
         }
+        return DirectMessageMapper.mapDirectMessageToDirectMessageDTO(directMessage);
     }
 
     public CursorPaginationResponse<List<DirectMessageDTO>> getAllChatByUserId(Long userId, CursorPaginationRequest request) {

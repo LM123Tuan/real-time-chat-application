@@ -68,9 +68,9 @@ public class AdminController {
     }
 
     @PatchMapping("/users/{id}/active-status")
-    public ResponseEntity<Void> changeActiveStatusForUser(Authentication authentication, @PathVariable Long id) {
+    public ResponseEntity<Void> changeActiveStatusForUser(Authentication authentication, @PathVariable Long id, @RequestParam boolean status) {
         Long requesterId = extractRequesterId(authentication);
-        adminService.changeActiveStatusForUser(requesterId, id);
+        adminService.changeActiveStatusForUser(requesterId, id, status);
         return ResponseEntity.noContent().build();
     }
 

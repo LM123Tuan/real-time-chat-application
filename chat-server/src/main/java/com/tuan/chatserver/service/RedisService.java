@@ -10,4 +10,5 @@ public interface RedisService {
     boolean exists(String key);
     void delete(String key);
     <T> Optional<T> getAndDelete(String key, Class<T> type);
+    <T> boolean setIfAbsent(String key, T value, Duration ttl);
 }

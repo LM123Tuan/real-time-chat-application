@@ -1,9 +1,13 @@
 package com.tuan.chatserver.repository;
 
 import com.tuan.chatserver.entity.GroupChat;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.QueryHint;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
@@ -44,6 +48,15 @@ public interface GroupChatRepository extends JpaRepository<GroupChat,Long> {
             " JOIN FETCH gc.viceLeaders "+
             " WHERE gc.id = :id ")
     Optional<GroupChat> findById(@Param("id") Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @QueryHints({@QueryHint(name = "jakarta.persistence.lock.timeout", value = "10000")})
+    @Query("SELECT DISTINCT gc FROM GroupChat gc "+
+            " JOIN FETCH gc.users "+
+            " JOIN FETCH gc.leaders "+
+            " JOIN FETCH gc.viceLeaders "+
+            " WHERE gc.id = :id ")
+    Optional<GroupChat> findByIdForUpdate(@Param("id") Long id);
 
     @Query("SELECT gc FROM GroupChat gc " +
             "JOIN gc.users filterUser " +

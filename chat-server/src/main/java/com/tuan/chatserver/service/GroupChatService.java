@@ -4,13 +4,17 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.tuan.chatserver.dto.*;
 import com.tuan.chatserver.entity.GroupChat;
 import com.tuan.chatserver.entity.User;
+import com.tuan.chatserver.enums.EntityType;
 import com.tuan.chatserver.enums.EventType;
 import com.tuan.chatserver.enums.GroupChatPermission;
 import com.tuan.chatserver.exception.*;
+import com.tuan.chatserver.exception.LockTimeoutException;
 import com.tuan.chatserver.mapper.GroupChatMapper;
 import com.tuan.chatserver.repository.GroupChatRepository;
 import com.tuan.chatserver.repository.UserRepository;
 import com.tuan.chatserver.util.CursorCodec;
+import jakarta.transaction.Transactional;
+import org.hibernate.PessimisticLockException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,8 +49,16 @@ public class GroupChatService {
 
     private GroupChat mapOptionalGroupChatToEntity(Long groupChatId){
         GroupChat groupChat=groupChatRepository.findById(groupChatId).orElseThrow(() -> {
-            logger.warn("Add member to group chat failed: group chat not found, groupChatId={}", groupChatId);
-            throw new ChatBoxNotFoundException(groupChatId);
+            logger.warn("Group chat not found, groupChatId={}", groupChatId);
+            return new ChatBoxNotFoundException(groupChatId);
+        });
+        return groupChat;
+    }
+
+    private GroupChat mapOptionalGroupChatToEntityForUpdate(Long groupChatId){
+        GroupChat groupChat=groupChatRepository.findByIdForUpdate(groupChatId).orElseThrow(() -> {
+            logger.warn("Group chat not found, groupChatId={}", groupChatId);
+            return new ChatBoxNotFoundException(groupChatId);
         });
         return groupChat;
     }
@@ -109,11 +121,20 @@ public class GroupChatService {
         }
     }
 
+    @Transactional
     public void renameGroupChat(Long requesterId, RenameGroupChatRequest request){
         Long groupChatId = request.getGroupChatId();
         String newName = request.getNewName();
         logger.info("Attempting to rename group chat, groupChatId={}", groupChatId);
-        GroupChat groupChat=mapOptionalGroupChatToEntity(groupChatId);
+
+        GroupChat groupChat;
+        try {
+            groupChat = mapOptionalGroupChatToEntityForUpdate(groupChatId);
+        } catch (PessimisticLockException | LockTimeoutException e) {
+            logger.warn("Timed out waiting for lock on groupChatId={}", groupChatId);
+            throw new LockTimeoutException(EntityType.GROUP_CHAT, groupChatId);
+        }
+
         User requester = userRepository.findById(requesterId).orElseThrow(() -> {
             throw new UserNotFoundException(requesterId);
         });
@@ -152,9 +173,18 @@ public class GroupChatService {
         return res;
     }
 
+    @Transactional
     public void addMembersToGroup(Long requesterId, Long groupChatId, Set<Long> otherUserIds){
         logger.info("Attempting to add member to group, requesterId={}, groupChatId={}, memberIds={}", requesterId, groupChatId, otherUserIds);
-        GroupChat groupChat=mapOptionalGroupChatToEntity(groupChatId);
+
+        GroupChat groupChat;
+        try {
+            groupChat = mapOptionalGroupChatToEntityForUpdate(groupChatId);
+        } catch (PessimisticLockException | LockTimeoutException e) {
+            logger.warn("Timed out waiting for lock on groupChatId={}", groupChatId);
+            throw new LockTimeoutException(EntityType.GROUP_CHAT, groupChatId);
+        }
+
         User requester=mapOptionalUserToEntity(requesterId);
         Set<User> addedUsers=mapOptionalUsersToUserEntities(otherUserIds);
         Set<User> users=groupChat.getUsers();
@@ -190,9 +220,18 @@ public class GroupChatService {
         }
     }
 
+    @Transactional
     public void removeUserFromGroup(Long requesterId, Long groupChatId, Long memberId){
         logger.info("Attempting to remove member from group, requesterId={}, groupChatId={}, memberId={}", requesterId, groupChatId, memberId);
-        GroupChat groupChat=mapOptionalGroupChatToEntity(groupChatId);
+
+        GroupChat groupChat;
+        try {
+            groupChat = mapOptionalGroupChatToEntityForUpdate(groupChatId);
+        } catch (PessimisticLockException | LockTimeoutException e) {
+            logger.warn("Timed out waiting for lock on groupChatId={}", groupChatId);
+            throw new LockTimeoutException(EntityType.GROUP_CHAT, groupChatId);
+        }
+
         User requester=mapOptionalUserToEntity(requesterId);
         User member=mapOptionalUserToEntity(memberId);
         Set<User> leaders=groupChat.getLeaders();
@@ -237,9 +276,18 @@ public class GroupChatService {
         }
     }
 
+    @Transactional
     public void outGroupChat(Long requesterId, Long groupChatId){
         logger.info("Attempting to leave group chat, requesterId={}, groupChatId={}", requesterId, groupChatId);
-        GroupChat groupChat=mapOptionalGroupChatToEntity(groupChatId);
+
+        GroupChat groupChat;
+        try {
+            groupChat = mapOptionalGroupChatToEntityForUpdate(groupChatId);
+        } catch (PessimisticLockException | LockTimeoutException e) {
+            logger.warn("Timed out waiting for lock on groupChatId={}", groupChatId);
+            throw new LockTimeoutException(EntityType.GROUP_CHAT, groupChatId);
+        }
+
         User requester=mapOptionalUserToEntity(requesterId);
         Set<User> users=groupChat.getUsers();
         Set<User> leaders=groupChat.getLeaders();
@@ -355,9 +403,18 @@ public class GroupChatService {
         return response;
     }
 
+    @Transactional
     public void promoteToViceLeader(Long requesterId, Long groupChatId, Long nomineeId){
         logger.info("Attempting to promote member to vice leader, requesterId={}, groupChatId={}, nomineeId={}", requesterId, groupChatId, nomineeId);
-        GroupChat groupChat=mapOptionalGroupChatToEntity(groupChatId);
+
+        GroupChat groupChat;
+        try {
+            groupChat = mapOptionalGroupChatToEntityForUpdate(groupChatId);
+        } catch (PessimisticLockException | LockTimeoutException e) {
+            logger.warn("Timed out waiting for lock on groupChatId={}", groupChatId);
+            throw new LockTimeoutException(EntityType.GROUP_CHAT, groupChatId);
+        }
+
         User requester=mapOptionalUserToEntity(requesterId);
         User nominee=mapOptionalUserToEntity(nomineeId);
         Set<User> leaders=groupChat.getLeaders();
@@ -393,9 +450,18 @@ public class GroupChatService {
         }
     }
 
+    @Transactional
     public void promoteToLeader(Long requesterId, Long groupChatId, Long nomineeId){
         logger.info("Attempting to promote member to leader, requesterId={}, groupChatId={}, nomineeId={}", requesterId, groupChatId, nomineeId);
-        GroupChat groupChat=mapOptionalGroupChatToEntity(groupChatId);
+
+        GroupChat groupChat;
+        try {
+            groupChat = mapOptionalGroupChatToEntityForUpdate(groupChatId);
+        } catch (PessimisticLockException | LockTimeoutException e) {
+            logger.warn("Timed out waiting for lock on groupChatId={}", groupChatId);
+            throw new LockTimeoutException(EntityType.GROUP_CHAT, groupChatId);
+        }
+
         User requester=mapOptionalUserToEntity(requesterId);
         User nominee=mapOptionalUserToEntity(nomineeId);
         Set<User> leaders=groupChat.getLeaders();
@@ -435,9 +501,18 @@ public class GroupChatService {
         }
     }
 
+    @Transactional
     public void demoteToViceLeader(Long requesterId, Long groupChatId, Long nomineeId){
         logger.info("Attempting to demote leader to vice leader, requesterId={}, groupChatId={}, nomineeId={}", requesterId, groupChatId, nomineeId);
-        GroupChat groupChat=mapOptionalGroupChatToEntity(groupChatId);
+
+        GroupChat groupChat;
+        try {
+            groupChat = mapOptionalGroupChatToEntityForUpdate(groupChatId);
+        } catch (PessimisticLockException | LockTimeoutException e) {
+            logger.warn("Timed out waiting for lock on groupChatId={}", groupChatId);
+            throw new LockTimeoutException(EntityType.GROUP_CHAT, groupChatId);
+        }
+
         User requester=mapOptionalUserToEntity(requesterId);
         User nominee=mapOptionalUserToEntity(nomineeId);
         Set<User> leaders=groupChat.getLeaders();
@@ -474,9 +549,18 @@ public class GroupChatService {
         }
     }
 
+    @Transactional
     public void demoteToUser(Long requesterId, Long groupChatId, Long nomineeId){
         logger.info("Attempting to demote member to regular user, requesterId={}, groupChatId={}, nomineeId={}", requesterId, groupChatId, nomineeId);
-        GroupChat groupChat=mapOptionalGroupChatToEntity(groupChatId);
+
+        GroupChat groupChat;
+        try {
+            groupChat = mapOptionalGroupChatToEntityForUpdate(groupChatId);
+        } catch (PessimisticLockException | LockTimeoutException e) {
+            logger.warn("Timed out waiting for lock on groupChatId={}", groupChatId);
+            throw new LockTimeoutException(EntityType.GROUP_CHAT, groupChatId);
+        }
+
         User requester=mapOptionalUserToEntity(requesterId);
         User nominee=mapOptionalUserToEntity(nomineeId);
         Set<User> leaders=groupChat.getLeaders();

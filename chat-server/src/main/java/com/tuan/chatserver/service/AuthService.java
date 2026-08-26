@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -102,12 +103,6 @@ public class AuthService {
         String email = oidcUser.getEmail();
         String fullname = oidcUser.getFullName();
         String username;
-        do {
-            username = "User" + UUID.randomUUID()
-                    .toString()
-                    .replace("-", "")
-                    .substring(0, 8);
-        } while (userRepository.existsByUsername(username));
         //String avatar = oidcUser.getPicture();
 
         Optional<User> optionalUser = userRepository.findByProviderAndProviderId(AuthProvider.GOOGLE, googleId);
@@ -121,8 +116,19 @@ public class AuthService {
                     throw new UserNotFoundException(email);
                 }
             }
+            do {
+                username = "User" + UUID.randomUUID()
+                        .toString()
+                        .replace("-", "")
+                        .substring(0, 8);
+            } while (userRepository.existsByUsername(username));
             user = new User(fullname, username, email, null, null, true, AuthProvider.GOOGLE, googleId);
-            userRepository.save(user);
+            try {
+                userRepository.save(user);
+            } catch (DataIntegrityViolationException e) {
+                logger.error("Unexpected username collision during Google login, username={}", username, e);
+                throw new DataAccessFailureException(e);
+            }
         }
 
         int updatedRows = personRepository.incrementTokenVersion(user.getId());
