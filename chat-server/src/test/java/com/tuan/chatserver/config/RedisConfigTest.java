@@ -1,5 +1,6 @@
 package com.tuan.chatserver.config;
 
+import io.github.cdimascio.dotenv.Dotenv;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -15,8 +16,12 @@ class RedisConfigTest {
 
     @BeforeAll
     static void setUp() {
+        Dotenv dotenv = Dotenv.configure()
+                .ignoreIfMissing()
+                .load();
+
         connectionFactory = new LettuceConnectionFactory("127.0.0.1", 6379);
-        connectionFactory.setPassword(System.getenv("REDIS_PASSWORD"));
+        connectionFactory.setPassword(dotenv.get("REDIS_PASSWORD"));
         connectionFactory.afterPropertiesSet();
 
         RedisConfig redisConfig = new RedisConfig();
