@@ -2,7 +2,8 @@ package com.tuan.chatserver.enums;
 
 public enum EventType {
     MESSAGE_NEW,
-    MESSAGE_STATUS_UPDATED,
+    MESSAGE_STATUS_UPDATED_TO_RECEIVED,
+    MESSAGE_STATUS_UPDATED_TO_SEEN,
     MESSAGE_RECALLED,
     GROUP_CHAT_CREATED,
     GROUP_RENAMED,

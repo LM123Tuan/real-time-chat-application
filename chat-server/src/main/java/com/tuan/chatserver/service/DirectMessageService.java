@@ -7,7 +7,6 @@ import com.tuan.chatserver.dto.DirectMessageDTO;
 import com.tuan.chatserver.dto.PageCursor;
 import com.tuan.chatserver.entity.DirectMessage;
 import com.tuan.chatserver.entity.User;
-import com.tuan.chatserver.enums.EntityType;
 import com.tuan.chatserver.exception.*;
 import com.tuan.chatserver.mapper.DirectMessageMapper;
 import com.tuan.chatserver.repository.DirectMessageRepository;
@@ -22,7 +21,6 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -32,38 +30,21 @@ import java.util.stream.Collectors;
 
 @Service
 public class DirectMessageService {
-    private static final String PRIVATE_CHAT_KEY_PREFIX = "privatechatkey:";
-    private static final Duration CREATE_PRIVATE_CHAT_TTL = Duration.ofSeconds(5);
-    private final RedisScript<Long> UNLOCK_SCRIPT = RedisScript.of(
-            "if redis.call('GET', KEYS[1]) == ARGV[1] " +
-                    "then " +
-                        "return redis.call('DEL', KEYS[1]) " +
-                    "else " +
-                        "return 0 " +
-                    "end",
-            Long.class
-    );
-    private final RedisTemplate<String, Object> redisTemplate;
     private final DirectMessageRepository directMessageRepository;
     private final UserRepository userRepository;
     private final MessageRepository messageRepository;
     private final CursorCodec cursorCodec;
-    private final RedisService redisService;
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     @Autowired
     public DirectMessageService(DirectMessageRepository directMessageRepository,
                                 UserRepository userRepository,
                                 MessageRepository messageRepository,
-                                CursorCodec cursorCodec,
-                                RedisService redisService,
-                                RedisTemplate<String, Object> redisTemplate) {
+                                CursorCodec cursorCodec) {
         this.directMessageRepository = directMessageRepository;
         this.userRepository = userRepository;
         this.messageRepository = messageRepository;
         this.cursorCodec=cursorCodec;
-        this.redisService=redisService;
-        this.redisTemplate=redisTemplate;
     }
 
     private DirectMessage createDirectMessageIfNotExists(Long creatorId, Long receiverId) {
@@ -79,42 +60,29 @@ public class DirectMessageService {
 
         Long smallerId = Math.min(creatorId, receiverId);
         Long largerId = Math.max(creatorId, receiverId);
-        String lockKey = PRIVATE_CHAT_KEY_PREFIX+smallerId+","+largerId;
-        String lockValue = UUID.randomUUID().toString();
 
-        boolean acquired = redisService.setIfAbsent(lockKey, lockValue, CREATE_PRIVATE_CHAT_TTL);
-        if(!acquired){
-            throw new LockTimeoutException(EntityType.DIRECT_MESSAGE, null);
-        }
-        try{
-            if(directMessageRepository.existsBetweenTwoUsers(creatorId, receiverId)){
+        try {
+            if (directMessageRepository.existsBetweenTwoUsers(creatorId, receiverId)) {
                 throw new ChatBoxAlreadyExistsException();
             }
 
-            Set<User> users=new HashSet<>();
+            Set<User> users = new HashSet<>();
             users.add(creator);
             users.add(receiver);
             String name = creator.getUsername() + " & " + receiver.getUsername();
-            String conversationKey=smallerId + "_" + largerId;
-            DirectMessage directMessage=new DirectMessage(name, LocalDateTime.now(), users, true, LocalDateTime.now(), conversationKey);
+            String conversationKey = smallerId + "_" + largerId;
+            DirectMessage directMessage = new DirectMessage(name, LocalDateTime.now(), users, true, LocalDateTime.now(), conversationKey);
             directMessageRepository.save(directMessage);
             logger.info("Create direct message successful between userId: {} and userId: {}", creatorId, receiverId);
             return directMessage;
-        }catch (ChatBoxAlreadyExistsException e) {
+        } catch (ChatBoxAlreadyExistsException e) {
             throw e;
-        }catch (DataIntegrityViolationException e) {
+        } catch (DataIntegrityViolationException e) {
             logger.warn("Create direct message failed - constraint violation, likely race condition between userId: {} and userId: {}", creatorId, receiverId);
             throw new ChatBoxAlreadyExistsException();
-        }catch (Exception e) {
+        } catch (Exception e) {
             logger.error("Create direct message failed while saving between userId: {} and userId: {}", creatorId, receiverId, e);
             throw new DataAccessFailureException(e);
-        }finally{
-            Long result = redisTemplate.execute(UNLOCK_SCRIPT, Collections.singletonList(lockKey), lockValue);
-            if (result == null || result == 0) {
-                logger.warn("Lock was not released, either already expired or held by another owner, lockKey={}", lockKey);
-            } else {
-                logger.info("Successfully released lock, lockKey={}", lockKey);
-            }
         }
     }
 

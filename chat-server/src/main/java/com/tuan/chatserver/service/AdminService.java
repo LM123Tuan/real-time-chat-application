@@ -23,8 +23,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.orm.ObjectOptimisticLockingFailureException;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -39,16 +38,16 @@ public class AdminService {
     private final AdminRepository adminRepository;
     private final ChatBoxRepository chatBoxRepository;
     private final MessageRepository messageRepository;
-    private final BCryptPasswordEncoder bcryptPasswordEncoder;
+    private final PasswordEncoder passwordEncoder;
     private final CursorCodec cursorCodec;
 
     @Autowired
-    public AdminService(UserRepository userRepository, AdminRepository adminRepository, ChatBoxRepository chatBoxRepository, MessageRepository messageRepository, BCryptPasswordEncoder bcryptPasswordEncoder, CursorCodec cursorCodec) {
+    public AdminService(UserRepository userRepository, AdminRepository adminRepository, ChatBoxRepository chatBoxRepository, MessageRepository messageRepository, PasswordEncoder passwordEncoder, CursorCodec cursorCodec) {
         this.userRepository = userRepository;
         this.adminRepository = adminRepository;
         this.chatBoxRepository = chatBoxRepository;
         this.messageRepository = messageRepository;
-        this.bcryptPasswordEncoder = bcryptPasswordEncoder;
+        this.passwordEncoder = passwordEncoder;
         this.cursorCodec = cursorCodec;
     }
 
@@ -66,19 +65,18 @@ public class AdminService {
         String username = adminRegisterRequest.getUsername();
         String password = adminRegisterRequest.getPassword();
         logger.info("Attempting to register admin, username={}", username);
-        String hashedPassword = bcryptPasswordEncoder.encode(password);
-        if(!adminRepository.existsByUsername(username)) {
-            Admin admin = new Admin(username, hashedPassword, true);
-            try{
-                adminRepository.save(admin);
-                logger.info("Admin registered successfully, username={}", username);
-            }catch (Exception e){
-                logger.error("Error occurred while registering admin, username={}", username, e);
-                throw new DataAccessFailureException(e);
-            }
-        }else{
+        if(adminRepository.existsByUsername(username)){
             logger.warn("Register admin failed: username already exists, username={}", username);
             throw new UsernameOrEmailAlreadyExistsException();
+        }
+        String hashedPassword = passwordEncoder.encode(password);
+        Admin admin = new Admin(username, hashedPassword, true);
+        try{
+            adminRepository.save(admin);
+            logger.info("Admin registered successfully, username={}", username);
+        }catch (Exception e){
+            logger.error("Error occurred while registering admin, username={}", username, e);
+            throw new DataAccessFailureException(e);
         }
     }
 

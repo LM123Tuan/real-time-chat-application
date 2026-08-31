@@ -2,13 +2,10 @@ package com.tuan.chatserver.service;
 
 import com.mongodb.client.result.UpdateResult;
 import com.tuan.chatserver.document.Message;
-import com.tuan.chatserver.dto.CursorPaginationRequest;
-import com.tuan.chatserver.dto.CursorPaginationResponse;
-import com.tuan.chatserver.dto.MessageDTO;
-import com.tuan.chatserver.dto.PageCursor;
-import com.tuan.chatserver.dto.SearchMessageRequest;
+import com.tuan.chatserver.dto.*;
 import com.tuan.chatserver.entity.ChatBox;
 import com.tuan.chatserver.entity.User;
+import com.tuan.chatserver.enums.EventType;
 import com.tuan.chatserver.enums.MessageStatus;
 import com.tuan.chatserver.exception.*;
 import com.tuan.chatserver.mapper.MessageMapper;
@@ -26,6 +23,7 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.MongoTransactionManager;
@@ -47,6 +45,7 @@ public class MessageService {
     private final MessageMapper messageMapper;
     private final CursorCodec cursorCodec;
     private final MongoTemplate mongoTemplate;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @Autowired
     public MessageService(MessageRepository messageRepository,
@@ -55,7 +54,8 @@ public class MessageService {
                           MongoTransactionManager mongoTransactionManager,
                           MessageMapper messageMapper,
                           CursorCodec cursorCodec,
-                          MongoTemplate mongoTemplate) {
+                          MongoTemplate mongoTemplate,
+                          SimpMessagingTemplate messagingTemplate) {
         this.messageRepository = messageRepository;
         this.chatBoxRepository = chatBoxRepository;
         this.userRepository = userRepository;
@@ -63,6 +63,7 @@ public class MessageService {
         this.messageMapper = messageMapper;
         this.cursorCodec = cursorCodec;
         this.mongoTemplate = mongoTemplate;
+        this.messagingTemplate=messagingTemplate;
     }
 
     @Transactional(readOnly = true)
@@ -341,6 +342,9 @@ public class MessageService {
         }
 
         markReceivedMessagesAsSeen(userId, chatBoxId, messages);
+
+        messagingTemplate.convertAndSend("/topic/chatbox/" + chatBoxId,
+                new ChatEvent<>(EventType.MESSAGE_STATUS_UPDATED_TO_SEEN, null));
 
         List<MessageDTO> dtos = mapToDTOList(messages);
 

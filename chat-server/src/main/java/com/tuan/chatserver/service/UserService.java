@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,7 +24,7 @@ import java.util.UUID;
 public class UserService {
     private final AuthService authService;
     private final UserRepository userRepository;
-    private final BCryptPasswordEncoder bCryptPasswordEncoder;
+    private final PasswordEncoder passwordEncoder;
     private final VerificationService verificationService;
     private final EmailService emailService;
     private final EmailTemplateService emailTemplateService;
@@ -36,14 +37,14 @@ public class UserService {
 
     @Autowired
     public UserService(UserRepository userRepository,
-                       BCryptPasswordEncoder bCryptPasswordEncoder,
+                       PasswordEncoder passwordEncoder,
                        VerificationService verificationService,
                        EmailService emailService,
                        EmailTemplateService emailTemplateService,
                        AuthService authService,
                        RefreshTokenService refreshTokenService) {
         this.userRepository = userRepository;
-        this.bCryptPasswordEncoder = bCryptPasswordEncoder;
+        this.passwordEncoder = passwordEncoder;
         this.verificationService=verificationService;
         this.emailService=emailService;
         this.emailTemplateService=emailTemplateService;
@@ -66,7 +67,7 @@ public class UserService {
         }
 
         String newVerificationToken=UUID.randomUUID().toString();
-        String hashedPassword = bCryptPasswordEncoder.encode(password);
+        String hashedPassword = passwordEncoder.encode(password);
         PendingRegistration pendingRegistration=new PendingRegistration(email, username, hashedPassword, fullname, phone);
 
         verificationService.createVerification(newVerificationToken, pendingRegistration);
@@ -109,7 +110,7 @@ public class UserService {
 
         User actualUser = userRepository.findById(id)
                 .orElseThrow(() -> new UserNotFoundException(id));
-        if (!bCryptPasswordEncoder.matches(password, actualUser.getPassword())) {
+        if (!passwordEncoder.matches(password, actualUser.getPassword())) {
             throw new WrongPasswordOrInactiveAccountException();
         }
 
@@ -198,13 +199,13 @@ public class UserService {
             throw new WrongPasswordOrInactiveAccountException();
         }
 
-        if(!bCryptPasswordEncoder.matches(oldPassword, actualUser.getPassword())){
+        if(!passwordEncoder.matches(oldPassword, actualUser.getPassword())){
             logger.warn("Change password failed - old password mismatch for userId: {}", id);
             throw new WrongPasswordOrInactiveAccountException();
         }
 
         try{
-            actualUser.setPassword(bCryptPasswordEncoder.encode(newPassword));
+            actualUser.setPassword(passwordEncoder.encode(newPassword));
             userRepository.save(actualUser);
             logger.info("Change password successful for userId: {}", id);
         }catch(Exception e){

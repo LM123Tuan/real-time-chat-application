@@ -65,7 +65,7 @@ public class ChatWebSocketController {
 
         messagingTemplate.convertAndSend(
                 "/topic/chatbox/" + chatBoxId,
-                new ChatEvent<>(EventType.MESSAGE_STATUS_UPDATED, messageId));
+                new ChatEvent<>(EventType.MESSAGE_STATUS_UPDATED_TO_RECEIVED, messageId));
     }
 
     @MessageMapping("/chat.status/seen/{chatBoxId}")
@@ -78,7 +78,7 @@ public class ChatWebSocketController {
 
         messagingTemplate.convertAndSend(
                 "/topic/chatbox/" + chatBoxId,
-                new ChatEvent<>(EventType.MESSAGE_STATUS_UPDATED, messageId));
+                new ChatEvent<>(EventType.MESSAGE_STATUS_UPDATED_TO_SEEN, messageId));
     }
 
     @MessageMapping("/chat.recall/{chatBoxId}")

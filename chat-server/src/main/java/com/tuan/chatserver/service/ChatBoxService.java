@@ -1,12 +1,10 @@
 package com.tuan.chatserver.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.tuan.chatserver.dto.ChatBoxDTO;
-import com.tuan.chatserver.dto.CursorPaginationRequest;
-import com.tuan.chatserver.dto.CursorPaginationResponse;
-import com.tuan.chatserver.dto.PageCursor;
+import com.tuan.chatserver.dto.*;
 import com.tuan.chatserver.entity.ChatBox;
 import com.tuan.chatserver.enums.ChatboxType;
+import com.tuan.chatserver.enums.EventType;
 import com.tuan.chatserver.exception.ChatBoxNotFoundException;
 import com.tuan.chatserver.mapper.ChatBoxMapper;
 import com.tuan.chatserver.repository.ChatBoxRepository;
@@ -15,6 +13,7 @@ import com.tuan.chatserver.util.CursorCodec;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,16 +29,18 @@ public class ChatBoxService {
     private final MessageService messageService;
     private final CursorCodec cursorCodec;
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
+    private final SimpMessagingTemplate messagingTemplate;
 
     @Autowired
     public ChatBoxService(ChatBoxRepository chatBoxRepository,
                           MessageRepository messageRepository,
                           MessageService messageService,
-                          CursorCodec cursorCodec) {
+                          CursorCodec cursorCodec, SimpMessagingTemplate messagingTemplate) {
         this.chatBoxRepository = chatBoxRepository;
         this.messageRepository = messageRepository;
         this.messageService = messageService;
         this.cursorCodec=cursorCodec;
+        this.messagingTemplate = messagingTemplate;
     }
 
     public CursorPaginationResponse<List<ChatBoxDTO>> getAllChatboxesForUser(Long userId, CursorPaginationRequest request) {
@@ -97,6 +98,8 @@ public class ChatBoxService {
             ChatBox confirmed = confirmedChatBoxMap.get(chatBox.getId());
             if (confirmed != null) {
                 chatBoxDTOs.add(ChatBoxMapper.mapChatBoxToChatBoxDTO(confirmed));
+                messagingTemplate.convertAndSend("/topic/chatbox/" + chatBox.getId(),
+                        new ChatEvent<>(EventType.MESSAGE_STATUS_UPDATED_TO_RECEIVED, null));
             }
         }
 
