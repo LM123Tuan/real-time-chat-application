@@ -12,4 +12,6 @@ public enum EventType {
     ADDED_TO_GROUP,
     REMOVED_FROM_GROUP,
     ROLE_CHANGED,
+    PRESENCE_ONLINE,
+    PRESENCE_OFFLINE
 }

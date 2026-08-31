@@ -42,7 +42,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                 .setRelayHost(relayHost)
                 .setRelayPort(relayPort)
                 .setClientLogin(relayLogin)
-                .setClientPasscode(relayPasscode);
+                .setClientPasscode(relayPasscode)
+                .setSystemHeartbeatSendInterval(10000)
+                .setSystemHeartbeatReceiveInterval(10000);
         registry.setApplicationDestinationPrefixes("/app");
     }
 

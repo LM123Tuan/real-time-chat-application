@@ -1,6 +1,7 @@
 package com.tuan.chatserver.service;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 
 public interface RedisService {
@@ -11,4 +12,5 @@ public interface RedisService {
     void delete(String key);
     <T> Optional<T> getAndDelete(String key, Class<T> type);
     <T> boolean setIfAbsent(String key, T value, Duration ttl);
+    <T> List<Optional<T>> multiGet(List<String> keys, Class<T> type);
 }

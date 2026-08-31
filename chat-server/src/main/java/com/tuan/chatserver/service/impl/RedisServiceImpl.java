@@ -10,6 +10,8 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -130,6 +132,36 @@ public class RedisServiceImpl implements RedisService {
             return result;
         }catch(DataAccessException e){
             logger.error("Failed to acquire lock in Redis, key={}", key, e);
+            throw new DataAccessFailureException(e);
+        }
+    }
+
+    @Override
+    public <T> List<Optional<T>> multiGet(List<String> keys, Class<T> type) {
+        logger.info("Batch getting {} keys", keys.size());
+
+        try {
+            List<Object> rawValues = redisTemplate.opsForValue().multiGet(keys);
+
+            List<Optional<T>> results = new ArrayList<>();
+            if (rawValues == null) {
+                keys.forEach(k -> results.add(Optional.empty()));
+                return results;
+            }
+
+            for (Object rawValue : rawValues) {
+                if (rawValue == null) {
+                    results.add(Optional.empty());
+                } else {
+                    results.add(Optional.of(type.cast(rawValue)));
+                }
+            }
+
+            logger.info("Batch get completed, {} of {} keys found",
+                    results.stream().filter(Optional::isPresent).count(), keys.size());
+            return results;
+        } catch (DataAccessException e) {
+            logger.error("Failed to batch get values from Redis", e);
             throw new DataAccessFailureException(e);
         }
     }
