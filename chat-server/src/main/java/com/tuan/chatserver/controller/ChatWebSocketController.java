@@ -13,6 +13,7 @@ import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 
@@ -32,6 +33,7 @@ public class ChatWebSocketController {
     }
 
     @MessageMapping("/chat.send/{chatBoxId}")
+    @PreAuthorize("!hasRole('ADMIN')")
     public void sendMessage(@DestinationVariable Long chatBoxId,
                             @Payload SendMessageRequest request,
                             Authentication authentication) {
@@ -56,6 +58,7 @@ public class ChatWebSocketController {
     }
 
     @MessageMapping("/chat.status/received/{chatBoxId}")
+    @PreAuthorize("!hasRole('ADMIN')")
     public void markMessageAsReceived(@DestinationVariable Long chatBoxId,
                                       @Payload String messageId,
                                       Authentication authentication) {
@@ -69,6 +72,7 @@ public class ChatWebSocketController {
     }
 
     @MessageMapping("/chat.status/seen/{chatBoxId}")
+    @PreAuthorize("!hasRole('ADMIN')")
     public void markMessageAsSeen(@DestinationVariable Long chatBoxId,
                                   @Payload String messageId,
                                   Authentication authentication) {
@@ -82,6 +86,7 @@ public class ChatWebSocketController {
     }
 
     @MessageMapping("/chat.recall/{chatBoxId}")
+    @PreAuthorize("!hasRole('ADMIN')")
     public void recallMessage(@DestinationVariable Long chatBoxId,
                               @Payload String messageId,
                               Authentication authentication) {

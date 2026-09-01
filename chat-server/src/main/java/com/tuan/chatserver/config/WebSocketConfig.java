@@ -1,5 +1,6 @@
 package com.tuan.chatserver.config;
 
+import com.tuan.chatserver.security.CustomStompErrorHandler;
 import com.tuan.chatserver.security.JwtChannelInterceptor;
 import com.tuan.chatserver.security.JwtHandshakeInterceptor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,12 +29,15 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final JwtHandshakeInterceptor jwtHandshakeInterceptor;
     private final JwtChannelInterceptor jwtChannelInterceptor;
+    private final CustomStompErrorHandler customStompErrorHandler;
 
     @Autowired
     public WebSocketConfig(JwtHandshakeInterceptor jwtHandshakeInterceptor,
-                           JwtChannelInterceptor jwtChannelInterceptor){
+                           JwtChannelInterceptor jwtChannelInterceptor,
+                           CustomStompErrorHandler customStompErrorHandler){
         this.jwtHandshakeInterceptor = jwtHandshakeInterceptor;
         this.jwtChannelInterceptor = jwtChannelInterceptor;
+        this.customStompErrorHandler=customStompErrorHandler;
     }
 
     @Override
@@ -54,6 +58,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                 .addInterceptors(jwtHandshakeInterceptor)
                 .setAllowedOrigins("http://localhost:5173")
                 .withSockJS();
+        registry.setErrorHandler(customStompErrorHandler);
     }
 
     @Override

@@ -6,6 +6,7 @@ import com.tuan.chatserver.entity.Admin;
 import com.tuan.chatserver.entity.ChatBox;
 import com.tuan.chatserver.entity.User;
 import com.tuan.chatserver.enums.EntityType;
+import com.tuan.chatserver.enums.EventType;
 import com.tuan.chatserver.exception.*;
 import com.tuan.chatserver.mapper.AdminMapper;
 import com.tuan.chatserver.mapper.ChatBoxMapper;
@@ -23,6 +24,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -40,15 +42,23 @@ public class AdminService {
     private final MessageRepository messageRepository;
     private final PasswordEncoder passwordEncoder;
     private final CursorCodec cursorCodec;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @Autowired
-    public AdminService(UserRepository userRepository, AdminRepository adminRepository, ChatBoxRepository chatBoxRepository, MessageRepository messageRepository, PasswordEncoder passwordEncoder, CursorCodec cursorCodec) {
+    public AdminService(UserRepository userRepository,
+                        AdminRepository adminRepository,
+                        ChatBoxRepository chatBoxRepository,
+                        MessageRepository messageRepository,
+                        PasswordEncoder passwordEncoder,
+                        CursorCodec cursorCodec,
+                        SimpMessagingTemplate messagingTemplate) {
         this.userRepository = userRepository;
         this.adminRepository = adminRepository;
         this.chatBoxRepository = chatBoxRepository;
         this.messageRepository = messageRepository;
         this.passwordEncoder = passwordEncoder;
         this.cursorCodec = cursorCodec;
+        this.messagingTemplate = messagingTemplate;
     }
 
     private void validateAdminAccess(Long requesterId) {
@@ -73,6 +83,8 @@ public class AdminService {
         Admin admin = new Admin(username, hashedPassword, true);
         try{
             adminRepository.save(admin);
+            messagingTemplate.convertAndSend("/topic/admin",
+                    new ChatEvent<>(EventType.ADMIN_REGISTERED, AdminMapper.mapAdminToAdminDTO(admin)));
             logger.info("Admin registered successfully, username={}", username);
         }catch (Exception e){
             logger.error("Error occurred while registering admin, username={}", username, e);
@@ -218,6 +230,8 @@ public class AdminService {
 
         user.setActive(newStatus);
         userRepository.save(user);
+        messagingTemplate.convertAndSend("/topic/admin",
+                new ChatEvent<>(EventType.USER_ACTIVE_STATUS_CHANGED, UserMapper.mapUserToOtherUserDTO(user)));
     }
 
     //CHATBOX
