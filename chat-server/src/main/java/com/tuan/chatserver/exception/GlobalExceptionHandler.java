@@ -174,4 +174,28 @@ public class GlobalExceptionHandler {
         ErrorResponse errorResponse = new ErrorResponse(e.getMessage(), HttpStatus.FORBIDDEN.value(), LocalDateTime.now());
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(errorResponse);
     }
+
+    @ExceptionHandler(InvalidRequestException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidRequestException(InvalidRequestException e){
+        logger.warn("Handled InvalidRequestException: {}", e.getMessage());
+        ErrorResponse errorResponse = new ErrorResponse(e.getMessage(), HttpStatus.BAD_REQUEST.value(), LocalDateTime.now());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+    }
+
+    @ExceptionHandler(LockTimeoutException.class)
+    public ResponseEntity<ErrorResponse> handleLockTimeoutException(LockTimeoutException e){
+        logger.warn("Handled LockTimeoutException: {}", e.getMessage());
+        ErrorResponse errorResponse = new ErrorResponse(e.getMessage(), HttpStatus.CONFLICT.value(), LocalDateTime.now());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(errorResponse);
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ErrorResponse> handleUnexpectedException(Exception e) {
+        logger.error("Unhandled exception of type {}: {}", e.getClass().getSimpleName(), e.getMessage(), e);
+        ErrorResponse errorResponse = new ErrorResponse(
+                "An unexpected error occurred",
+                HttpStatus.INTERNAL_SERVER_ERROR.value(),
+                LocalDateTime.now());
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+    }
 }

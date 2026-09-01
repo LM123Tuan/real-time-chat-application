@@ -341,10 +341,16 @@ public class MessageService {
             messages = messages.subList(0, request.getSize());
         }
 
-        markReceivedMessagesAsSeen(userId, chatBoxId, messages);
-
-        messagingTemplate.convertAndSend("/topic/chatbox/" + chatBoxId,
-                new ChatEvent<>(EventType.MESSAGE_STATUS_UPDATED_TO_SEEN, null));
+        if (request.getCursor() == null) {
+            markReceivedMessagesAsSeen(userId, chatBoxId);
+            for (Message m : messages) {
+                if (m.getStatus() != MessageStatus.SEEN && !m.getSenderId().equals(userId)) {
+                    m.setStatus(MessageStatus.SEEN);
+                }
+            }
+            messagingTemplate.convertAndSend("/topic/chatbox/" + chatBoxId,
+                    new ChatEvent<>(EventType.MESSAGE_STATUS_UPDATED_TO_SEEN, null));
+        }
 
         List<MessageDTO> dtos = mapToDTOList(messages);
 
@@ -362,24 +368,20 @@ public class MessageService {
         return response;
     }
 
-    private void markReceivedMessagesAsSeen(Long requesterId, Long chatBoxId, List<Message> messages) {
-        if (messages.isEmpty()) {
-            return;
-        }
-        logger.debug("Marking messages as SEEN, requesterId={}, chatBoxId={}, messageCount={}",
-                requesterId, chatBoxId, messages.size());
+    private void markReceivedMessagesAsSeen(Long requesterId, Long chatBoxId) {
+        logger.debug("Marking messages as SEEN, requesterId={}, chatBoxId={}", requesterId, chatBoxId);
 
         validateUserInChatBox(requesterId, chatBoxId);
 
-        for (Message message : messages) {
-            if (message.getStatus() != MessageStatus.SEEN && !message.getSenderId().equals(requesterId)) {
-                message.setStatus(MessageStatus.SEEN);
-            }
-        }
+        Query query = new Query(Criteria.where("chatBoxId").is(chatBoxId)
+                .and("status").ne(MessageStatus.SEEN)
+                .and("senderId").ne(requesterId));
+        Update update = new Update().set("status", MessageStatus.SEEN);
 
         try {
-            messageRepository.saveAll(messages);
-            logger.info("Marked message(s) as SEEN, requesterId={}, chatBoxId={}", requesterId, chatBoxId);
+            UpdateResult result = mongoTemplate.updateMulti(query, update, Message.class);
+            logger.info("Marked {} message(s) as SEEN, requesterId={}, chatBoxId={}",
+                    result.getModifiedCount(), requesterId, chatBoxId);
         } catch (Exception e) {
             logger.error("Error occurred while marking messages as SEEN, requesterId={}, chatBoxId={}",
                     requesterId, chatBoxId, e);
