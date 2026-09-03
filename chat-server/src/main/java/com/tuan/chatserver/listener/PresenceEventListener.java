@@ -6,7 +6,6 @@ import com.tuan.chatserver.service.PresenceService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
-import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
@@ -27,7 +26,6 @@ public class PresenceEventListener {
     }
 
     @EventListener
-    @MessageMapping("/admin/online")
     public void handleSessionConnected(SessionConnectedEvent event){
         SimpMessageHeaderAccessor accessor= SimpMessageHeaderAccessor.wrap(event.getMessage());
         String sessionId = accessor.getSessionId();
@@ -45,7 +43,6 @@ public class PresenceEventListener {
     }
 
     @EventListener
-    @MessageMapping("/admin/online")
     public void handleSessionDisconnected(SessionDisconnectEvent event){
         SimpMessageHeaderAccessor accessor= SimpMessageHeaderAccessor.wrap(event.getMessage());
         String sessionId = accessor.getSessionId();
