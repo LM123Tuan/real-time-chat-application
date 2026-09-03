@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 public class PageCursor<C> {
+    private long pageNumber;
     private LocalDateTime timestamp;
     private C id;
 }

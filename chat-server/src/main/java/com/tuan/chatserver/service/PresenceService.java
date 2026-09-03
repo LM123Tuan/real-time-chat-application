@@ -6,7 +6,6 @@ import com.tuan.chatserver.dto.PresenceResponse;
 import com.tuan.chatserver.enums.EventType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -15,17 +14,19 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
-public class PresenceService{
-    private final Logger logger= LoggerFactory.getLogger(this.getClass());
+public class PresenceService {
+    private final Logger logger = LoggerFactory.getLogger(this.getClass());
     private final RedisService redisService;
-    private final RedisTemplate<String, String> redisTemplate;
     private final SimpMessagingTemplate messagingTemplate;
 
     private static final String PRESENCE_KEY_PREFIX = "presence:online:";
+    private static final String ONLINE_USERS_SET_KEY = "presence:online_users";
+
     private static final RedisScript<Long> OFFLINE_SCRIPT = RedisScript.of(
             "local current = redis.call('GET', KEYS[1]) " +
                     "if current == ARGV[1] then " +
                     "    redis.call('DEL', KEYS[1]) " +
+                    "    redis.call('SREM', KEYS[2], ARGV[2]) " +
                     "    return 1 " +
                     "else " +
                     "    return 0 " +
@@ -34,17 +35,16 @@ public class PresenceService{
     );
 
     public PresenceService(RedisService redisService,
-                           RedisTemplate<String, String> redisTemplate,
-                           SimpMessagingTemplate messagingTemplate){
-        this.redisService=redisService;
-        this.redisTemplate=redisTemplate;
-        this.messagingTemplate=messagingTemplate;
+                           SimpMessagingTemplate messagingTemplate) {
+        this.redisService = redisService;
+        this.messagingTemplate = messagingTemplate;
     }
 
-    public void markOnline(Long userId, String sessionId){
+    public void markOnline(Long userId, String sessionId) {
         logger.info("Marking user online, userId={}, sessionId={}", userId, sessionId);
         String key = PRESENCE_KEY_PREFIX + userId;
         redisService.set(key, sessionId);
+        redisService.addToSet(ONLINE_USERS_SET_KEY, userId.toString());
         logger.info("User marked online, userId={}", userId);
 
         messagingTemplate.convertAndSend(
@@ -52,14 +52,14 @@ public class PresenceService{
                 new ChatEvent<>(EventType.PRESENCE_ONLINE, new PresenceResponse(userId, "ONLINE")));
     }
 
-    public void markOffline(Long userId, String sessionId){
+    public void markOffline(Long userId, String sessionId) {
         logger.info("Marking user offline attempt, userId={}, sessionId={}", userId, sessionId);
         String key = PRESENCE_KEY_PREFIX + userId;
 
-        Long result = redisTemplate.execute(
+        Long result = redisService.execute(
                 OFFLINE_SCRIPT,
-                Collections.singletonList(key),
-                sessionId
+                Arrays.asList(key, ONLINE_USERS_SET_KEY),
+                sessionId, userId.toString()
         );
 
         if (result != null && result == 1L) {
@@ -100,5 +100,12 @@ public class PresenceService{
 
         logger.debug("Batch check completed, {} of {} users online", onlineCount, userIds.size());
         return new PresenceBatchResponse(responses);
+    }
+
+    public Long getOnlineCount() {
+        logger.debug("Fetching total online user count");
+        long count = redisService.getSetSize(ONLINE_USERS_SET_KEY);
+        logger.debug("Total online user count={}", count);
+        return count;
     }
 }

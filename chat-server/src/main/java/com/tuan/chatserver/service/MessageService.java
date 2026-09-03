@@ -105,6 +105,8 @@ public class MessageService {
                 ? null
                 : cursorCodec.decode(paginationRequest.getCursor(), new TypeReference<PageCursor<String>>() {});
 
+        long pageNumber = cursorData != null ? cursorData.getPageNumber() : 0;
+
         List<Message> messages;
         if (senderId != null) {
             User sender = userRepository.findById(senderId).orElseThrow(() -> {
@@ -147,7 +149,7 @@ public class MessageService {
         String nextCursor = null;
         if (!messages.isEmpty()) {
             Message lastMessage = messages.get(messages.size() - 1);
-            PageCursor<String> nextCursorData = new PageCursor<>(lastMessage.getTimestamp(), lastMessage.getId());
+            PageCursor<String> nextCursorData = new PageCursor<>(pageNumber+1, lastMessage.getTimestamp(), lastMessage.getId());
             nextCursor = cursorCodec.encode(nextCursorData);
         }
 
@@ -323,11 +325,13 @@ public class MessageService {
                 Sort.by(Sort.Direction.DESC, "timestamp", "id"));
 
         List<Message> messages;
+        long pageNumber=0;
         if (request.getCursor() == null) {
             messages = messageRepository.findByChatBoxIdForFirstPage(chatBoxId, pageable);
         } else {
             PageCursor<String> cursorData = cursorCodec.decode(
                     request.getCursor(), new TypeReference<PageCursor<String>>() {});
+            pageNumber = cursorData.getPageNumber();
             messages = messageRepository.findByChatBoxIdForNextPage(
                     chatBoxId,
                     cursorData.getTimestamp(),
@@ -357,7 +361,7 @@ public class MessageService {
         String nextCursor = null;
         if (!messages.isEmpty()) {
             Message lastMessage = messages.get(messages.size() - 1);
-            PageCursor<String> cursorData = new PageCursor<>(lastMessage.getTimestamp(), lastMessage.getId());
+            PageCursor<String> cursorData = new PageCursor<>(pageNumber+1, lastMessage.getTimestamp(), lastMessage.getId());
             nextCursor = cursorCodec.encode(cursorData);
         }
 

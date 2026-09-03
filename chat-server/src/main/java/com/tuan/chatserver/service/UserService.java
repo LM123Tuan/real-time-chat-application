@@ -10,6 +10,9 @@ import com.tuan.chatserver.security.CustomUserDetails;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -100,6 +103,12 @@ public class UserService {
         }
     }
 
+    @Caching(
+            evict = {
+                    @CacheEvict(value = "admin_Users", allEntries = true),
+                    @CacheEvict(value = "users_Id", key = "#authentication.principal.id()")
+            }
+    )
     @Transactional
     public void deleteAccount(Authentication authentication, String password){
         CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
@@ -133,6 +142,7 @@ public class UserService {
         }
     }
 
+    @Cacheable(value = "users_Id", key = "#id")
     public MyProfileDTO getProfile(Long id){
         logger.debug("Fetching profile for userId: {}", id);
         Optional<User> user = userRepository.findById(id);
@@ -144,6 +154,12 @@ public class UserService {
         }
     }
 
+    @Caching(
+            evict = {
+                    @CacheEvict(value = "users_Id", key = "#id"),
+                    @CacheEvict(value = "admin_Users", allEntries = true)
+            }
+    )
     public void updateProfile(Long id, UpdateProfileRequest updateProfileRequest){
         String fullname = updateProfileRequest.getFullname();
         String username = updateProfileRequest.getUsername();
@@ -238,6 +254,7 @@ public class UserService {
         return UserMapper.mapUserToOtherUserDTO(user);
     }
 
+    @Cacheable(value = "users_Identifier", key = "#identifier")
     public OtherProfileDTO findActiveUserByUsernameOrEmail(String identifier){
         return identifier.contains("@")
                 ? findActiveUserByEmail(identifier)

@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -162,6 +163,63 @@ public class RedisServiceImpl implements RedisService {
             return results;
         } catch (DataAccessException e) {
             logger.error("Failed to batch get values from Redis", e);
+            throw new DataAccessFailureException(e);
+        }
+    }
+
+    @Override
+    public <T> void addToSet(String key, T value) {
+        logger.info("Adding value to Redis set, key={}", key);
+
+        try {
+            redisTemplate.opsForSet().add(key, value);
+        } catch (DataAccessException e) {
+            logger.error("Failed to add value to Redis set, key={}", key, e);
+            throw new DataAccessFailureException(e);
+        }
+
+        logger.info("Successfully added value to Redis set, key={}", key);
+    }
+
+    @Override
+    public <T> void removeFromSet(String key, T value) {
+        logger.info("Removing value from Redis set, key={}", key);
+
+        try {
+            redisTemplate.opsForSet().remove(key, value);
+        } catch (DataAccessException e) {
+            logger.error("Failed to remove value from Redis set, key={}", key, e);
+            throw new DataAccessFailureException(e);
+        }
+
+        logger.info("Successfully removed value from Redis set, key={}", key);
+    }
+
+    @Override
+    public long getSetSize(String key) {
+        logger.debug("Fetching Redis set size, key={}", key);
+
+        try {
+            Long size = redisTemplate.opsForSet().size(key);
+            long result = size != null ? size : 0L;
+            logger.debug("Redis set size, key={}, size={}", key, result);
+            return result;
+        } catch (DataAccessException e) {
+            logger.error("Failed to fetch Redis set size, key={}", key, e);
+            throw new DataAccessFailureException(e);
+        }
+    }
+
+    @Override
+    public <T> T execute(RedisScript<T> script, List<String> keys, Object... args) {
+        logger.info("Executing Redis script, keys={}", keys);
+
+        try {
+            T result = redisTemplate.execute(script, keys, args);
+            logger.info("Successfully executed Redis script, keys={}", keys);
+            return result;
+        } catch (DataAccessException e) {
+            logger.error("Failed to execute Redis script, keys={}", keys, e);
             throw new DataAccessFailureException(e);
         }
     }

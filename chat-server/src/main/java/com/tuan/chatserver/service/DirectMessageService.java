@@ -17,13 +17,12 @@ import jakarta.transaction.Transactional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -86,6 +85,10 @@ public class DirectMessageService {
         }
     }
 
+    @Cacheable(
+            value = "directMessage_UserIds",
+            key = "T(Math).min(#requesterId, #receiverId) + '_' + T(Math).max(#requesterId, #receiverId)"
+    )
     @Transactional
     public DirectMessageDTO getChatBetweenTwoUsersByUserIds(Long requesterId, Long receiverId) {
         logger.info("Attempting to get direct message between users, requesterId={}, receiverId={}", requesterId, receiverId);
@@ -100,6 +103,7 @@ public class DirectMessageService {
         return DirectMessageMapper.mapDirectMessageToDirectMessageDTO(directMessage);
     }
 
+    @Cacheable(value="directMessage_chatBoxId", key = "#userId + '_' + #id")
     public DirectMessageDTO getChatBetweenTwoUsersByChatBoxId(Long userId, Long id) {
         logger.debug("Fetching direct message with chatBoxId: {}", id);
         DirectMessage directMessage = directMessageRepository.findById(id)
@@ -112,17 +116,24 @@ public class DirectMessageService {
         return DirectMessageMapper.mapDirectMessageToDirectMessageDTO(directMessage);
     }
 
+    @Cacheable(
+            value = "user_DirectMessages",
+            key = "#userId + '_' + @cursorHelper.extractPageNumber(#request.cursor)",
+            condition = "@cursorHelper.extractPageNumber(#request.cursor) < 5"
+    )
     public CursorPaginationResponse<List<DirectMessageDTO>> getAllChatByUserId(Long userId, CursorPaginationRequest request) {
         logger.debug("Fetching active direct messages for userId: {}", userId);
 
         Pageable pageable = PageRequest.of(0, request.getSize() + 1);
 
         List<DirectMessage> directMessagesRaw;
+        long pageNumber=0;
         if (request.getCursor() == null) {
             directMessagesRaw = directMessageRepository.findByUserIdOfFirstPage(userId, pageable);
         } else {
             PageCursor<Long> cursorData = cursorCodec.decode(
                     request.getCursor(), new TypeReference<PageCursor<Long>>() {});
+            pageNumber=cursorData.getPageNumber();
             directMessagesRaw = directMessageRepository.findByUserIdOfNextPage(
                     userId,
                     cursorData.getTimestamp(),
@@ -171,7 +182,7 @@ public class DirectMessageService {
         String nextCursor = null;
         if (!directMessages.isEmpty()) {
             DirectMessage lastDm = directMessages.get(directMessages.size() - 1);
-            PageCursor<Long> cursorData = new PageCursor<>(lastDm.getLastActiveTime(), lastDm.getId());
+            PageCursor<Long> cursorData = new PageCursor<>(pageNumber+1, lastDm.getLastActiveTime(), lastDm.getId());
             nextCursor = cursorCodec.encode(cursorData);
         }
 

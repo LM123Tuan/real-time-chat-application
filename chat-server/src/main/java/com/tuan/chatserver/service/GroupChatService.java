@@ -18,6 +18,9 @@ import org.hibernate.PessimisticLockException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -80,6 +83,12 @@ public class GroupChatService {
         return users;
     }
 
+    @Caching(
+            evict = {
+                    @CacheEvict(value = "admin_Chatboxes", allEntries = true),
+                    @CacheEvict(value = "user_GroupChats", allEntries = true),
+            }
+    )
     public GroupChatDTO createGroupChat(Long creatorId, Set<Long> otherUserIds){
         logger.info("Attempting to create group chat, creatorId={}", creatorId);
         if(otherUserIds==null||otherUserIds.size()<=1){
@@ -121,6 +130,14 @@ public class GroupChatService {
         }
     }
 
+    @Caching(
+            evict = {
+                    @CacheEvict(value = "admin_Chatboxes", allEntries = true),
+                    @CacheEvict(value = "user_Chatboxes", allEntries = true),
+                    @CacheEvict(value = "chatbox", key="#request.groupChatId"),
+                    @CacheEvict(value = "groupChats", key = "#request.groupChatId")
+            }
+    )
     @Transactional
     public void renameGroupChat(Long requesterId, RenameGroupChatRequest request){
         Long groupChatId = request.getGroupChatId();
@@ -173,6 +190,13 @@ public class GroupChatService {
         return res;
     }
 
+    @Caching(
+            evict = {
+                    @CacheEvict(value = "groupChats", key = "#groupChatId"),
+                    @CacheEvict(value = "user_GroupChats", allEntries = true),
+                    @CacheEvict(value = "chatbox", key="#groupChatId")
+            }
+    )
     @Transactional
     public void addMembersToGroup(Long requesterId, Long groupChatId, Set<Long> otherUserIds){
         logger.info("Attempting to add member to group, requesterId={}, groupChatId={}, memberIds={}", requesterId, groupChatId, otherUserIds);
@@ -220,6 +244,14 @@ public class GroupChatService {
         }
     }
 
+    @Caching(
+            evict = {
+                    @CacheEvict(value = "user_GroupChats", allEntries = true),
+                    @CacheEvict(value = "groupChat_Permission", allEntries = true),
+                    @CacheEvict(value = "groupChats", key = "#groupChatId"),
+                    @CacheEvict(value = "chatbox", key="#groupChatId")
+            }
+    )
     @Transactional
     public void removeUserFromGroup(Long requesterId, Long groupChatId, Long memberId){
         logger.info("Attempting to remove member from group, requesterId={}, groupChatId={}, memberId={}", requesterId, groupChatId, memberId);
@@ -276,6 +308,14 @@ public class GroupChatService {
         }
     }
 
+    @Caching(
+            evict = {
+                    @CacheEvict(value = "user_GroupChats", allEntries = true),
+                    @CacheEvict(value = "groupChat_Permission", allEntries = true),
+                    @CacheEvict(value = "groupChats", key = "#groupChatId"),
+                    @CacheEvict(value = "chatbox", key="#groupChatId")
+            }
+    )
     @Transactional
     public void outGroupChat(Long requesterId, Long groupChatId){
         logger.info("Attempting to leave group chat, requesterId={}, groupChatId={}", requesterId, groupChatId);
@@ -292,6 +332,12 @@ public class GroupChatService {
         Set<User> users=groupChat.getUsers();
         Set<User> leaders=groupChat.getLeaders();
         Set<User> viceLeaders=groupChat.getViceLeaders();
+
+        if(!users.contains(requester)){
+            logger.warn("Leave group chat failed: requester not in group, groupChatId={}, requesterId={}", groupChatId, requesterId);
+            throw new UserNotInChatBoxException(groupChatId, requesterId);
+        }
+
         users.remove(requester);
         int leadersSize=leaders.size();
         int viceLeadersSize=viceLeaders.size();
@@ -333,6 +379,7 @@ public class GroupChatService {
         }
     }
 
+    @Cacheable(value = "groupChats", key = "#userId + '_' + #groupChatId")
     public GroupChatDTO getGroupChatById(Long userId, Long groupChatId){
         logger.debug("Fetching group chat by id, groupChatId={}", groupChatId);
         GroupChat groupChat=mapOptionalGroupChatToEntity(groupChatId);
@@ -351,11 +398,13 @@ public class GroupChatService {
         Pageable pageable = PageRequest.of(0, request.getSize() + 1);
 
         List<GroupChat> groupChats;
+        long pageNumber=0;
         if (request.getCursor() == null) {
             groupChats = groupChatRepository.findByNameContainingAndUserIdOfFirstPage(groupChatKeyword, userId, pageable);
         } else {
             PageCursor<Long> cursorData = cursorCodec.decode(
                     request.getCursor(), new TypeReference<PageCursor<Long>>() {});
+            pageNumber=cursorData.getPageNumber();
             groupChats = groupChatRepository.findByNameContainingAndUserIdOfNextPage(
                     groupChatKeyword,
                     userId,
@@ -392,7 +441,7 @@ public class GroupChatService {
         String nextCursor = null;
         if (!groupChats.isEmpty()) {
             GroupChat lastGroupChat = groupChats.get(groupChats.size() - 1);
-            PageCursor<Long> cursorData = new PageCursor<>(lastGroupChat.getLastActiveTime(), lastGroupChat.getId());
+            PageCursor<Long> cursorData = new PageCursor<>(pageNumber+1, lastGroupChat.getLastActiveTime(), lastGroupChat.getId());
             nextCursor = cursorCodec.encode(cursorData);
         }
 
@@ -403,6 +452,13 @@ public class GroupChatService {
         return response;
     }
 
+    @Caching(
+            evict = {
+                    @CacheEvict(value = "user_GroupChats", allEntries = true),
+                    @CacheEvict(value = "groupChat_Permission", key = "#nomineeId + '_' + #groupChatId"),
+                    @CacheEvict(value = "groupChats", key = "#groupChatId")
+            }
+    )
     @Transactional
     public void promoteToViceLeader(Long requesterId, Long groupChatId, Long nomineeId){
         logger.info("Attempting to promote member to vice leader, requesterId={}, groupChatId={}, nomineeId={}", requesterId, groupChatId, nomineeId);
@@ -450,6 +506,13 @@ public class GroupChatService {
         }
     }
 
+    @Caching(
+            evict = {
+                    @CacheEvict(value = "user_GroupChats", allEntries = true),
+                    @CacheEvict(value = "groupChat_Permission", key = "#nomineeId + '_' + #groupChatId"),
+                    @CacheEvict(value = "groupChats", key = "#groupChatId")
+            }
+    )
     @Transactional
     public void promoteToLeader(Long requesterId, Long groupChatId, Long nomineeId){
         logger.info("Attempting to promote member to leader, requesterId={}, groupChatId={}, nomineeId={}", requesterId, groupChatId, nomineeId);
@@ -501,6 +564,13 @@ public class GroupChatService {
         }
     }
 
+    @Caching(
+            evict = {
+                    @CacheEvict(value = "user_GroupChats", allEntries = true),
+                    @CacheEvict(value = "groupChat_Permission", key = "#nomineeId + '_' + #groupChatId"),
+                    @CacheEvict(value = "groupChats", key = "#groupChatId")
+            }
+    )
     @Transactional
     public void demoteToViceLeader(Long requesterId, Long groupChatId, Long nomineeId){
         logger.info("Attempting to demote leader to vice leader, requesterId={}, groupChatId={}, nomineeId={}", requesterId, groupChatId, nomineeId);
@@ -549,6 +619,13 @@ public class GroupChatService {
         }
     }
 
+    @Caching(
+            evict = {
+                    @CacheEvict(value = "user_GroupChats", allEntries = true),
+                    @CacheEvict(value = "groupChat_Permission", key = "#nomineeId + '_' + #groupChatId"),
+                    @CacheEvict(value = "groupChats", key = "#groupChatId")
+            }
+    )
     @Transactional
     public void demoteToUser(Long requesterId, Long groupChatId, Long nomineeId){
         logger.info("Attempting to demote member to regular user, requesterId={}, groupChatId={}, nomineeId={}", requesterId, groupChatId, nomineeId);
@@ -599,17 +676,24 @@ public class GroupChatService {
         }
     }
 
+    @Cacheable(
+            value = "user_GroupChats",
+            key = "#userId + '_' + @cursorHelper.extractPageNumber(#request.cursor)",
+            condition = "@cursorHelper.extractPageNumber(#request.cursor) < 5"
+    )
     public CursorPaginationResponse<List<GroupChatDTO>> getAllGroupChatByUserId(Long userId, CursorPaginationRequest request) {
         logger.debug("Fetching all active group chats for userId={}", userId);
 
         Pageable pageable = PageRequest.of(0, request.getSize() + 1);
 
         List<GroupChat> groupChats;
+        long pageNumber=0;
         if (request.getCursor() == null) {
             groupChats = groupChatRepository.findByUserIdOfFirstPage(userId, pageable);
         } else {
             PageCursor<Long> cursorData = cursorCodec.decode(
                     request.getCursor(), new TypeReference<PageCursor<Long>>() {});
+            pageNumber=cursorData.getPageNumber();
             groupChats = groupChatRepository.findByUserIdOfNextPage(
                     userId,
                     cursorData.getTimestamp(),
@@ -645,7 +729,7 @@ public class GroupChatService {
         String nextCursor = null;
         if (!groupChats.isEmpty()) {
             GroupChat lastGroupChat = groupChats.get(groupChats.size() - 1);
-            PageCursor<Long> cursorData = new PageCursor<>(lastGroupChat.getLastActiveTime(), lastGroupChat.getId());
+            PageCursor<Long> cursorData = new PageCursor<>(pageNumber+1, lastGroupChat.getLastActiveTime(), lastGroupChat.getId());
             nextCursor = cursorCodec.encode(cursorData);
         }
 
@@ -656,6 +740,7 @@ public class GroupChatService {
         return response;
     }
 
+    @Cacheable(value = "groupChat_Permission", key = "#userId + '_' + #groupChatId")
     public GroupChatPermission getGroupChatPermission(Long userId, Long groupChatId){
         GroupChat groupChat = groupChatRepository.findById(groupChatId).orElseThrow(() -> {
             throw new ChatBoxNotFoundException(groupChatId);

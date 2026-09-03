@@ -11,6 +11,7 @@ import com.tuan.chatserver.repository.ChatBoxRepository;
 import com.tuan.chatserver.repository.MessageRepository;
 import com.tuan.chatserver.util.CursorCodec;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -49,10 +50,12 @@ public class ChatBoxService {
         Pageable pageable = PageRequest.of(0, request.getSize() + 1);
 
         List<ChatBox> chatBoxes;
+        long pageNumber=0;
         if (request.getCursor() == null) {
             chatBoxes = chatBoxRepository.findByUserIdAndIsActiveTrueOfFirstPage(userId, pageable);
         } else {
             PageCursor<Long> cursorData = cursorCodec.decode(request.getCursor(), new TypeReference<PageCursor<Long>>(){});
+            pageNumber=cursorData.getPageNumber();
             chatBoxes = chatBoxRepository.findByUserIdAndIsActiveTrueOfNextPage(
                     userId,
                     cursorData.getTimestamp(),
@@ -106,7 +109,7 @@ public class ChatBoxService {
         String nextCursor = null;
         if (!chatBoxes.isEmpty()) {
             ChatBox lastChatBox = chatBoxes.get(chatBoxes.size() - 1);
-            PageCursor<Long> cursorData = new PageCursor<>(lastChatBox.getLastActiveTime(), lastChatBox.getId());
+            PageCursor<Long> cursorData = new PageCursor<>(pageNumber+1,lastChatBox.getLastActiveTime(), lastChatBox.getId());
             nextCursor = cursorCodec.encode(cursorData);
         }
 
@@ -117,6 +120,7 @@ public class ChatBoxService {
         return response;
     }
 
+    @Cacheable(value = "chatbox", key="#chatBoxId")
     public ChatBox getChatBoxWithUsers(Long chatBoxId) {
         logger.debug("Fetching chatbox with users, chatBoxId={}", chatBoxId);
         return chatBoxRepository.findById(chatBoxId)

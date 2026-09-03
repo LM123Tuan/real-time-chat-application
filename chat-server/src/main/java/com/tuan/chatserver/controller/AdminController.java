@@ -3,6 +3,7 @@ package com.tuan.chatserver.controller;
 import com.tuan.chatserver.dto.*;
 import com.tuan.chatserver.security.CustomUserDetails;
 import com.tuan.chatserver.service.AdminService;
+import com.tuan.chatserver.service.PresenceService;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -16,9 +17,12 @@ import java.util.List;
 @RequestMapping("/admin")
 public class AdminController {
     private final AdminService adminService;
+    private final PresenceService presenceService;
 
-    public AdminController(AdminService adminService) {
+    public AdminController(AdminService adminService,
+                           PresenceService presenceService) {
         this.adminService = adminService;
+        this.presenceService=presenceService;
     }
 
     private Long extractRequesterId(Authentication authentication) {
@@ -34,97 +38,89 @@ public class AdminController {
     }
 
     @GetMapping
-    public ResponseEntity<AdminDTO> findAdminByUsername(Authentication authentication, @RequestParam String username) {
-        Long requesterId = extractRequesterId(authentication);
-        AdminDTO adminDTO = adminService.findAdminByUsername(requesterId, username);
+    public ResponseEntity<AdminDTO> findAdminByUsername(@RequestParam String username) {
+        AdminDTO adminDTO = adminService.findAdminByUsername(username);
         return ResponseEntity.ok(adminDTO);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<AdminDTO> findAdminById(Authentication authentication, @PathVariable Long id) {
-        Long requesterId = extractRequesterId(authentication);
-        AdminDTO adminDTO = adminService.findAdminById(requesterId, id);
+    public ResponseEntity<AdminDTO> findAdminById(@PathVariable Long id) {
+        AdminDTO adminDTO = adminService.findAdminById(id);
         return ResponseEntity.ok(adminDTO);
     }
 
     @GetMapping("/me")
     public ResponseEntity<AdminDTO> getAdminProfile(Authentication authentication) {
         Long requesterId = extractRequesterId(authentication);
-        AdminDTO adminDTO = adminService.getAdminProfile(requesterId, requesterId);
+        AdminDTO adminDTO = adminService.getAdminProfile(requesterId);
         return ResponseEntity.ok(adminDTO);
     }
 
     //USER
 
     @PostMapping("/users/search")
-    public ResponseEntity<CursorPaginationResponse<List<OtherProfileDTO>>> findAllUsers(Authentication authentication,
-                                                                                        @RequestParam(required = false) String keyword,
+    public ResponseEntity<CursorPaginationResponse<List<OtherProfileDTO>>> findAllUsers(@RequestParam(required = false) String keyword,
                                                                                         @RequestBody CursorPaginationRequest request) {
-        Long requesterId = extractRequesterId(authentication);
         CursorPaginationResponse<List<OtherProfileDTO>> users = (keyword == null || keyword.isBlank())
-                ? adminService.findAllUsers(requesterId, request)
-                : adminService.findUserByUsernameContaining(requesterId, keyword, request);
+                ? adminService.findAllUsers(request)
+                : adminService.findUserByUsernameContaining(keyword, request);
         return ResponseEntity.ok(users);
     }
 
     @PatchMapping("/users/{id}/active-status")
-    public ResponseEntity<Void> changeActiveStatusForUser(Authentication authentication, @PathVariable Long id, @RequestParam boolean status) {
-        Long requesterId = extractRequesterId(authentication);
-        adminService.changeActiveStatusForUser(requesterId, id, status);
+    public ResponseEntity<Void> changeActiveStatusForUser(@PathVariable Long id, @RequestParam boolean status) {
+        adminService.changeActiveStatusForUser(id, status);
         return ResponseEntity.noContent().build();
     }
 
     //CHATBOX
 
     @PostMapping("/chatboxes/search")
-    public ResponseEntity<CursorPaginationResponse<List<ChatBoxDTO>>> getAllChatBox(Authentication authentication,
-                                                                                    @RequestBody CursorPaginationRequest request) {
-        Long requesterId = extractRequesterId(authentication);
-        CursorPaginationResponse<List<ChatBoxDTO>> chatBoxes = adminService.getAllChatBox(requesterId, request);
+    public ResponseEntity<CursorPaginationResponse<List<ChatBoxDTO>>> getAllChatBox(@RequestBody CursorPaginationRequest request) {
+        CursorPaginationResponse<List<ChatBoxDTO>> chatBoxes = adminService.getAllChatBox(request);
         return ResponseEntity.ok(chatBoxes);
     }
 
     @PostMapping("/users/{userId}/chatboxes/search")
-    public ResponseEntity<CursorPaginationResponse<List<ChatBoxDTO>>> getAllUserChatBox(Authentication authentication,
-                                                                                        @PathVariable Long userId,
+    public ResponseEntity<CursorPaginationResponse<List<ChatBoxDTO>>> getAllUserChatBox(@PathVariable Long userId,
                                                                                         @RequestBody CursorPaginationRequest request) {
-        Long requesterId = extractRequesterId(authentication);
-        CursorPaginationResponse<List<ChatBoxDTO>> chatBoxes = adminService.getAllUserChatBox(requesterId, userId, request);
+        CursorPaginationResponse<List<ChatBoxDTO>> chatBoxes = adminService.getAllUserChatBox(userId, request);
         return ResponseEntity.ok(chatBoxes);
     }
 
     //STATISTICS
 
     @GetMapping("/stats/users")
-    public ResponseEntity<Long> countUsers(Authentication authentication, @RequestParam(required = false) Boolean isActive) {
-        Long requesterId = extractRequesterId(authentication);
+    public ResponseEntity<Long> countUsers(@RequestParam(required = false) Boolean isActive) {
         Long count = (isActive == null)
-                ? adminService.countUsers(requesterId)
-                : adminService.countUsersByActiveStatus(requesterId, isActive);
+                ? adminService.countUsers()
+                : adminService.countUsersByActiveStatus(isActive);
         return ResponseEntity.ok(count);
     }
 
     @GetMapping("/stats/chatboxes")
     public ResponseEntity<Long> countChatBoxes(
-            Authentication authentication,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
-        Long requesterId = extractRequesterId(authentication);
         Long count = (startTime == null || endTime == null)
-                ? adminService.countChatBoxes(requesterId)
-                : adminService.countChatBoxesByLastActiveTimeBetween(requesterId, startTime, endTime);
+                ? adminService.countChatBoxes()
+                : adminService.countChatBoxesByLastActiveTimeBetween(startTime, endTime);
         return ResponseEntity.ok(count);
     }
 
     @GetMapping("/stats/messages")
     public ResponseEntity<Long> countMessages(
-            Authentication authentication,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
-        Long requesterId = extractRequesterId(authentication);
         Long count = (startTime == null || endTime == null)
-                ? adminService.countMessages(requesterId)
-                : adminService.countMessagesByTimestampBetween(requesterId, startTime, endTime);
+                ? adminService.countMessages()
+                : adminService.countMessagesByTimestampBetween(startTime, endTime);
+        return ResponseEntity.ok(count);
+    }
+
+    @GetMapping("/stats/online-users")
+    public ResponseEntity<Long> countOnlineUsers() {
+        Long count = presenceService.getOnlineCount();
         return ResponseEntity.ok(count);
     }
 }

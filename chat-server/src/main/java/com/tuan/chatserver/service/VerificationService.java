@@ -38,11 +38,11 @@ public class VerificationService {
     private final DefaultRedisScript<Long> createVerificationScript;
     private final DefaultRedisScript<Long> removeVerificationScript;
 
-    private final RedisTemplate<String, Object> redisTemplate;
+    private final RedisService redisService;
 
     @Autowired
-    public VerificationService(RedisTemplate<String, Object> redisTemplate) {
-        this.redisTemplate = redisTemplate;
+    public VerificationService(RedisService redisService) {
+        this.redisService=redisService;
         this.createVerificationScript = new DefaultRedisScript<>(CREATE_VERIFICATION_SCRIPT, Long.class);
         this.removeVerificationScript = new DefaultRedisScript<>(REMOVE_VERIFICATION_SCRIPT, Long.class);
     }
@@ -50,7 +50,7 @@ public class VerificationService {
     public boolean hasPendingVerification(String email) {
         logger.info("Checking pending verification for email={}", email);
         try {
-            return Boolean.TRUE.equals(redisTemplate.hasKey(buildEmailKey(email)));
+            return redisService.exists(buildEmailKey(email));
         } catch (Exception e) {
             throw new DataAccessFailureException(e);
         }
@@ -63,7 +63,7 @@ public class VerificationService {
             String tokenKey = buildTokenKey(token);
             String emailKey = buildEmailKey(pendingRegistration.getEmail());
 
-            redisTemplate.execute(
+            redisService.execute(
                     createVerificationScript,
                     List.of(tokenKey, emailKey),
                     pendingRegistration,
@@ -79,7 +79,7 @@ public class VerificationService {
     public Optional<PendingRegistration> getPendingRegistration(String token) {
         logger.info("Retrieving pending registration for token={}", token);
         try {
-            Object value = redisTemplate.opsForValue().get(buildTokenKey(token));
+            Object value = redisService.get(buildTokenKey(token), PendingRegistration.class);
             return Optional.ofNullable((PendingRegistration) value);
         } catch (Exception e) {
             throw new DataAccessFailureException(e);
@@ -93,7 +93,7 @@ public class VerificationService {
             String tokenKey = buildTokenKey(token);
             String emailKey = buildEmailKey(email);
 
-            redisTemplate.execute(
+            redisService.execute(
                     removeVerificationScript,
                     List.of(tokenKey, emailKey)
             );
@@ -105,7 +105,7 @@ public class VerificationService {
     public Optional<String> getTokenByEmail(String email) {
         logger.info("Retrieving verification token for email={}", email);
         try {
-            Object token = redisTemplate.opsForValue().get(buildEmailKey(email));
+            Object token = redisService.get(buildEmailKey(email), String.class);
             return Optional.ofNullable(token).map(Object::toString);
         } catch (Exception e) {
             throw new DataAccessFailureException(e);

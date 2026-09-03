@@ -38,11 +38,11 @@ public class ResetPasswordService {
     private final DefaultRedisScript<Long> createResetPasswordScript;
     private final DefaultRedisScript<Long> removeResetPasswordScript;
 
-    private final RedisTemplate<String, Object> redisTemplate;
+    private final RedisService redisService;
 
     @Autowired
-    public ResetPasswordService(RedisTemplate<String, Object> redisTemplate) {
-        this.redisTemplate = redisTemplate;
+    public ResetPasswordService(RedisService redisService) {
+        this.redisService=redisService;
         this.createResetPasswordScript = new DefaultRedisScript<>(CREATE_RESET_PASSWORD_SCRIPT, Long.class);
         this.removeResetPasswordScript = new DefaultRedisScript<>(REMOVE_RESET_PASSWORD_SCRIPT, Long.class);
     }
@@ -50,7 +50,7 @@ public class ResetPasswordService {
     public boolean hasPendingVerification(String email) {
         logger.info("Checking pending verification for email={}", email);
         try {
-            return Boolean.TRUE.equals(redisTemplate.hasKey(buildEmailKey(email)));
+            return redisService.exists(buildEmailKey(email));
         } catch (Exception e) {
             throw new DataAccessFailureException(e);
         }
@@ -63,7 +63,7 @@ public class ResetPasswordService {
             String tokenKey = buildTokenKey(token);
             String emailKey = buildEmailKey(email);
 
-            redisTemplate.execute(
+            redisService.execute(
                     createResetPasswordScript,
                     List.of(tokenKey, emailKey),
                     email,
@@ -79,7 +79,7 @@ public class ResetPasswordService {
     public Optional<String> getEmailByToken(String token) {
         logger.info("Retrieving email for reset password token={}", token);
         try {
-            Object email = redisTemplate.opsForValue().get(buildTokenKey(token));
+            Object email = redisService.get(buildTokenKey(token), String.class);
             return Optional.ofNullable(email).map(Object::toString);
         } catch (Exception e) {
             throw new DataAccessFailureException(e);
@@ -93,7 +93,7 @@ public class ResetPasswordService {
             String tokenKey = buildTokenKey(token);
             String emailKey = buildEmailKey(email);
 
-            redisTemplate.execute(
+            redisService.execute(
                     removeResetPasswordScript,
                     List.of(tokenKey, emailKey)
             );
@@ -105,7 +105,7 @@ public class ResetPasswordService {
     public Optional<String> getTokenByEmail(String email) {
         logger.info("Retrieving reset password token for email={}", email);
         try {
-            Object token = redisTemplate.opsForValue().get(buildEmailKey(email));
+            Object token = redisService.get(buildEmailKey(email), String.class);
             return Optional.ofNullable(token).map(Object::toString);
         } catch (Exception e) {
             throw new DataAccessFailureException(e);

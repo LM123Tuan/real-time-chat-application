@@ -22,6 +22,8 @@ spring.data.mongodb.auto-index-creation=true
 # ===== Redis =====
 spring.data.redis.host=${REDIS_HOST:localhost}
 spring.data.redis.port=${REDIS_PORT:6379}
+spring.cache.type=redis
+spring.cache.redis.time-to-live=<CACHE_TTL>
 spring.data.redis.password=${REDIS_PASSWORD}
 spring.data.redis.timeout=${REDIS_TIMEOUT:2000}
 spring.data.redis.connect-timeout=${REDIS_CONNECT_TIMEOUT:2000}

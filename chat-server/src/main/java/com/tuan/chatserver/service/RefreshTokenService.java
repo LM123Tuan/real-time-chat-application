@@ -49,16 +49,18 @@ public class RefreshTokenService {
 
     private final RefreshTokenRepository refreshTokenRepository;
     private final JwtService jwtService;
-    private final RedisTemplate<String, Object> redisTemplate;
+    private final RedisService redisService;
 
     @Value("${jwt.refresh-token-expiration}")
     private long refreshTokenExpiration;
 
     @Autowired
-    public RefreshTokenService(RefreshTokenRepository refreshTokenRepository, JwtService jwtService, RedisTemplate<String, Object> redisTemplate){
+    public RefreshTokenService(RefreshTokenRepository refreshTokenRepository,
+                               JwtService jwtService,
+                               RedisService redisService){
         this.refreshTokenRepository=refreshTokenRepository;
         this.jwtService=jwtService;
-        this.redisTemplate = redisTemplate;
+        this.redisService = redisService;
         this.createRefreshTokenScript = new DefaultRedisScript<>(CREATE_REFRESH_TOKEN_SCRIPT, Long.class);
         this.revokeScript = new DefaultRedisScript<>(REVOKE_SCRIPT, Long.class);
     }
@@ -76,7 +78,7 @@ public class RefreshTokenService {
             RefreshToken refreshToken = new RefreshToken(token, expiryDate, person);
             RefreshToken saved = refreshTokenRepository.save(refreshToken);
 
-            redisTemplate.execute(
+            redisService.execute(
                     createRefreshTokenScript,
                     List.of(personKey, tokenKey),
                     token,
@@ -101,7 +103,7 @@ public class RefreshTokenService {
     public Optional<String> findTokenByPersonId(Long personId) {
         logger.debug("Looking up refresh token for personId={}", personId);
         try {
-            Object token = redisTemplate.opsForValue().get(PERSON_PREFIX + personId);
+            Object token = redisService.get(PERSON_PREFIX + personId, String.class);
             return Optional.ofNullable(token).map(Object::toString);
         } catch (Exception e) {
             throw new DataAccessFailureException(e);
@@ -110,7 +112,7 @@ public class RefreshTokenService {
 
     public void validateToken(RefreshToken refreshToken) {
         try {
-            if (!Boolean.TRUE.equals(redisTemplate.hasKey(REFRESH_TOKEN_PREFIX + refreshToken.getToken()))) {
+            if (!redisService.exists(REFRESH_TOKEN_PREFIX + refreshToken.getToken())) {
                 throw new RefreshTokenExpiredOrNotExistsException(refreshToken.getPerson().getId());
             }
         } catch (RefreshTokenExpiredOrNotExistsException e) {
@@ -124,7 +126,7 @@ public class RefreshTokenService {
         try {
             String tokenKey = REFRESH_TOKEN_PREFIX + refreshToken;
 
-            redisTemplate.execute(
+            redisService.execute(
                     revokeScript,
                     List.of(tokenKey),
                     PERSON_PREFIX

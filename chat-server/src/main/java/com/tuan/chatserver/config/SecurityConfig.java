@@ -44,7 +44,8 @@ public class SecurityConfig {
                                 "/api/auth/**",
                                 "/oauth2/**",
                                 "/login/oauth2/**",
-                                "/ws/**"
+                                "/ws/**",
+                                "/api/users/register"
                         ).permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/users/**","/api/chats/**").hasRole("USER")

@@ -22,6 +22,9 @@ import org.hibernate.PessimisticLockException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -61,14 +64,6 @@ public class AdminService {
         this.messagingTemplate = messagingTemplate;
     }
 
-    private void validateAdminAccess(Long requesterId) {
-        logger.debug("Validating admin access, requesterId={}", requesterId);
-        if (!adminRepository.existsById(requesterId)) {
-            logger.warn("Access denied: requester is not an admin, requesterId={}", requesterId);
-            throw new AdminAccessDeniedException(requesterId);
-        }
-    }
-
     //ADMIN
 
     public void registerAdmin(AdminRegisterRequest adminRegisterRequest) {
@@ -92,8 +87,8 @@ public class AdminService {
         }
     }
 
-    public AdminDTO findAdminByUsername(Long requesterId, String username) {
-        validateAdminAccess(requesterId);
+    @Cacheable(value = "adminByUsername", key = "#username")
+    public AdminDTO findAdminByUsername(String username) {
         logger.debug("Fetching admin by username, username={}", username);
         Optional<Admin> admin = adminRepository.findByUsername(username);
         if (admin.isPresent()) {
@@ -106,8 +101,8 @@ public class AdminService {
         }
     }
 
-    public AdminDTO findAdminById(Long requesterId, Long id){
-        validateAdminAccess(requesterId);
+    @Cacheable(value = "adminById", key = "#id")
+    public AdminDTO findAdminById(Long id){
         logger.debug("Fetching admin by id, id={}", id);
         Optional<Admin> admin = adminRepository.findById(id);
         if (admin.isPresent()) {
@@ -120,8 +115,8 @@ public class AdminService {
         }
     }
 
-    public AdminDTO getAdminProfile(Long requesterId, Long id){
-        validateAdminAccess(requesterId);
+    @Cacheable(value = "adminById", key = "#id")
+    public AdminDTO getAdminProfile(Long id){
         logger.debug("Fetching admin profile, id={}", id);
         Optional<Admin> admin = adminRepository.findById(id);
         if (admin.isPresent()) {
@@ -136,17 +131,23 @@ public class AdminService {
 
     //USER
 
-    public CursorPaginationResponse<List<OtherProfileDTO>> findAllUsers(Long requesterId, CursorPaginationRequest request) {
-        validateAdminAccess(requesterId);
+    @Cacheable(
+            value = "admin_Users",
+            key = "@cursorHelper.extractPageNumber(#request.cursor)",
+            condition = "@cursorHelper.extractPageNumber(#request.cursor) < 5"
+    )
+    public CursorPaginationResponse<List<OtherProfileDTO>> findAllUsers(CursorPaginationRequest request) {
         logger.debug("Fetching all users");
 
         Pageable pageable = PageRequest.of(0, request.getSize() + 1);
 
         List<User> users;
+        long pageNumber=0;
         if (request.getCursor() == null) {
             users = userRepository.findAllOfFirstPage(pageable);
         } else {
             PageCursor<Long> cursorData = cursorCodec.decode(request.getCursor(), new TypeReference<PageCursor<Long>>() {});
+            pageNumber=cursorData.getPageNumber();
             users = userRepository.findAllOfNextPage(cursorData.getId(), pageable);
         }
 
@@ -162,7 +163,7 @@ public class AdminService {
 
         String nextCursor = null;
         if (!users.isEmpty()) {
-            PageCursor<Long> cursorData = new PageCursor<>(null, users.get(users.size() - 1).getId());
+            PageCursor<Long> cursorData = new PageCursor<>(pageNumber+1,null, users.get(users.size() - 1).getId());
             nextCursor = cursorCodec.encode(cursorData);
         }
 
@@ -174,18 +175,19 @@ public class AdminService {
     }
 
     public CursorPaginationResponse<List<OtherProfileDTO>> findUserByUsernameContaining(
-            Long requesterId, String keyword, CursorPaginationRequest request) {
+            String keyword, CursorPaginationRequest request) {
 
-        validateAdminAccess(requesterId);
         logger.debug("Fetching users by username containing keyword, keyword={}", keyword);
 
         Pageable pageable = PageRequest.of(0, request.getSize() + 1);
 
         List<User> users;
+        long pageNumber=0;
         if (request.getCursor() == null) {
             users = userRepository.findByUsernameContainingOfFirstPage(keyword, pageable);
         } else {
             PageCursor<Long> cursorData = cursorCodec.decode(request.getCursor(), new TypeReference<PageCursor<Long>>() {});
+            pageNumber=cursorData.getPageNumber();
             users = userRepository.findByUsernameContainingOfNextPage(keyword, cursorData.getId(), pageable);
         }
 
@@ -201,7 +203,7 @@ public class AdminService {
 
         String nextCursor = null;
         if (!users.isEmpty()) {
-            PageCursor<Long> cursorData = new PageCursor<>(null, users.get(users.size() - 1).getId());
+            PageCursor<Long> cursorData = new PageCursor<>(pageNumber+1,null, users.get(users.size() - 1).getId());
             nextCursor = cursorCodec.encode(cursorData);
         }
 
@@ -213,8 +215,13 @@ public class AdminService {
     }
 
     @Transactional
-    public void changeActiveStatusForUser(Long requesterId, Long id, boolean newStatus) {
-        validateAdminAccess(requesterId);
+    @Caching(
+            evict = {
+                    @CacheEvict(value = "admin_Users", allEntries = true),
+                    @CacheEvict(value = "users_Id", key = "#id")
+            }
+    )
+    public void changeActiveStatusForUser(Long id, boolean newStatus) {
 
         User user;
         try {
@@ -236,17 +243,23 @@ public class AdminService {
 
     //CHATBOX
 
-    public CursorPaginationResponse<List<ChatBoxDTO>> getAllChatBox(Long requesterId, CursorPaginationRequest request) {
-        validateAdminAccess(requesterId);
+    @Cacheable(
+            value = "admin_Chatboxes",
+            key = "@cursorHelper.extractPageNumber(#request.cursor)",
+            condition = "@cursorHelper.extractPageNumber(#request.cursor) < 5"
+    )
+    public CursorPaginationResponse<List<ChatBoxDTO>> getAllChatBox(CursorPaginationRequest request) {
         logger.debug("Fetching all chatboxes");
 
         Pageable pageable = PageRequest.of(0, request.getSize() + 1);
 
         List<ChatBox> chatBoxes;
+        long pageNumber=0;
         if (request.getCursor() == null) {
             chatBoxes = chatBoxRepository.findAllOfFirstPage(pageable);
         } else {
             PageCursor<Long> cursorData = cursorCodec.decode(request.getCursor(), new TypeReference<PageCursor<Long>>() {});
+            pageNumber=cursorData.getPageNumber();
             chatBoxes = chatBoxRepository.findAllOfNextPage(cursorData.getId(), pageable);
         }
 
@@ -276,7 +289,7 @@ public class AdminService {
 
         String nextCursor = null;
         if (!chatBoxes.isEmpty()) {
-            PageCursor<Long> cursorData = new PageCursor<>(null, chatBoxes.get(chatBoxes.size() - 1).getId());
+            PageCursor<Long> cursorData = new PageCursor<>(pageNumber+1,null, chatBoxes.get(chatBoxes.size() - 1).getId());
             nextCursor = cursorCodec.encode(cursorData);
         }
 
@@ -288,18 +301,19 @@ public class AdminService {
     }
 
     public CursorPaginationResponse<List<ChatBoxDTO>> getAllUserChatBox(
-            Long requesterId, Long userId, CursorPaginationRequest request) {
+            Long userId, CursorPaginationRequest request) {
 
-        validateAdminAccess(requesterId);
         logger.debug("Fetching all chatboxes for userId={}", userId);
 
         Pageable pageable = PageRequest.of(0, request.getSize() + 1);
 
         List<ChatBox> chatBoxes;
+        long pageNumber=0;
         if (request.getCursor() == null) {
             chatBoxes = chatBoxRepository.findByUserIdOfFirstPage(userId, pageable);
         } else {
             PageCursor<Long> cursorData = cursorCodec.decode(request.getCursor(), new TypeReference<PageCursor<Long>>() {});
+            pageNumber=cursorData.getPageNumber();
             chatBoxes = chatBoxRepository.findByUserIdOfNextPage(
                     userId, cursorData.getTimestamp(), cursorData.getId(), pageable);
         }
@@ -331,7 +345,7 @@ public class AdminService {
         String nextCursor = null;
         if (!chatBoxes.isEmpty()) {
             ChatBox lastChatBox = chatBoxes.get(chatBoxes.size() - 1);
-            PageCursor<Long> cursorData = new PageCursor<>(lastChatBox.getLastActiveTime(), lastChatBox.getId());
+            PageCursor<Long> cursorData = new PageCursor<>(pageNumber+1,lastChatBox.getLastActiveTime(), lastChatBox.getId());
             nextCursor = cursorCodec.encode(cursorData);
         }
 
@@ -344,48 +358,48 @@ public class AdminService {
 
     //STATISTICS
 
-    public Long countUsers(Long requesterId){
-        validateAdminAccess(requesterId);
+    @Cacheable(value = "stats_userCount")
+    public Long countUsers(){
         logger.debug("Counting total users");
         Long count = userRepository.count();
         logger.debug("Total users count={}", count);
         return count;
     }
 
-    public Long countUsersByActiveStatus(Long requesterId, Boolean isActive){
-        validateAdminAccess(requesterId);
+    @Cacheable(value = "stats_userCountByActive", key = "#isActive")
+    public Long countUsersByActiveStatus(Boolean isActive){
         logger.debug("Counting users by active status, isActive={}", isActive);
         Long count = userRepository.countByIsActive(isActive);
         logger.debug("Users count for isActive={} is {}", isActive, count);
         return count;
     }
 
-    public Long countChatBoxes(Long requesterId){
-        validateAdminAccess(requesterId);
+    @Cacheable(value = "stats_chatBoxCount")
+    public Long countChatBoxes(){
         logger.debug("Counting total chatboxes");
         Long count = chatBoxRepository.count();
         logger.debug("Total chatboxes count={}", count);
         return count;
     }
 
-    public Long countChatBoxesByLastActiveTimeBetween(Long requesterId, LocalDateTime startTime, LocalDateTime endTime) {
-        validateAdminAccess(requesterId);
+    @Cacheable(value = "stats_chatBoxCountByRange", key = "#startTime + '_' + #endTime")
+    public Long countChatBoxesByLastActiveTimeBetween(LocalDateTime startTime, LocalDateTime endTime) {
         logger.debug("Counting chatboxes with lastActiveTime between startTime={} and endTime={}", startTime, endTime);
         Long count = chatBoxRepository.countByLastActiveTimeBetween(startTime,endTime);
         logger.debug("Chatboxes count in given time range={}", count);
         return count;
     }
 
-    public Long countMessages(Long requesterId){
-        validateAdminAccess(requesterId);
+    @Cacheable(value = "stats_messageCount")
+    public Long countMessages(){
         logger.debug("Counting total messages");
         Long count = messageRepository.count();
         logger.debug("Total messages count={}", count);
         return count;
     }
 
-    public Long countMessagesByTimestampBetween(Long requesterId, LocalDateTime startTime, LocalDateTime endTime) {
-        validateAdminAccess(requesterId);
+    @Cacheable(value = "stats_messageCountByRange", key = "#startTime + '_' + #endTime")
+    public Long countMessagesByTimestampBetween(LocalDateTime startTime, LocalDateTime endTime) {
         logger.debug("Counting messages with timestamp between startTime={} and endTime={}", startTime, endTime);
         Long count = messageRepository.countByTimestampBetween(startTime,endTime);
         logger.debug("Messages count in given time range={}", count);
