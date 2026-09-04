@@ -6,8 +6,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
+import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -211,15 +213,45 @@ public class RedisServiceImpl implements RedisService {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public <T> T execute(RedisScript<T> script, List<String> keys, Object... args) {
         logger.info("Executing Redis script, keys={}", keys);
 
         try {
-            T result = redisTemplate.execute(script, keys, args);
+            T result = redisTemplate.execute(
+                    script,
+                    redisTemplate.getStringSerializer(),
+                    (RedisSerializer<T>) redisTemplate.getStringSerializer(),
+                    keys,
+                    args
+            );
             logger.info("Successfully executed Redis script, keys={}", keys);
             return result;
         } catch (DataAccessException e) {
             logger.error("Failed to execute Redis script, keys={}", keys, e);
+            throw new DataAccessFailureException(e);
+        }
+    }
+
+    @Override
+    public Optional<String> getRaw(String key) {
+        logger.info("Retrieving raw string value from Redis, key={}", key);
+
+        try {
+            RedisSerializer<String> stringSerializer = redisTemplate.getStringSerializer();
+            byte[] rawKey = stringSerializer.serialize(key);
+            byte[] rawValue = redisTemplate.execute((RedisConnection connection) ->
+                    connection.stringCommands().get(rawKey));
+
+            if (rawValue == null) {
+                logger.info("No value found in Redis, key={}", key);
+                return Optional.empty();
+            }
+
+            String value = stringSerializer.deserialize(rawValue);
+            return Optional.ofNullable(value);
+        } catch (DataAccessException e) {
+            logger.error("Failed to retrieve raw value from Redis, key={}", key, e);
             throw new DataAccessFailureException(e);
         }
     }

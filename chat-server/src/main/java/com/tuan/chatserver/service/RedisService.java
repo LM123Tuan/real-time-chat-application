@@ -19,4 +19,5 @@ public interface RedisService {
     <T> void removeFromSet(String key, T value);
     long getSetSize(String key);
     <T> T execute(RedisScript<T> script, List<String> keys, Object... args);
+    Optional<String> getRaw(String key);
 }

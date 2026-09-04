@@ -84,7 +84,7 @@ public class RefreshTokenService {
                     token,
                     String.valueOf(refreshTokenExpiration),
                     REFRESH_TOKEN_PREFIX,
-                    person.getId()
+                    String.valueOf(person.getId())
             );
 
             logger.info("Refresh token created successfully for personId={}", person.getId());
@@ -103,7 +103,7 @@ public class RefreshTokenService {
     public Optional<String> findTokenByPersonId(Long personId) {
         logger.debug("Looking up refresh token for personId={}", personId);
         try {
-            Object token = redisService.get(PERSON_PREFIX + personId, String.class);
+            Object token = redisService.getRaw(PERSON_PREFIX + personId);
             return Optional.ofNullable(token).map(Object::toString);
         } catch (Exception e) {
             throw new DataAccessFailureException(e);

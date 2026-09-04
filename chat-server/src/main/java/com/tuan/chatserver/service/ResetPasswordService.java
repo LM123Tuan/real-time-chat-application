@@ -79,7 +79,7 @@ public class ResetPasswordService {
     public Optional<String> getEmailByToken(String token) {
         logger.info("Retrieving email for reset password token={}", token);
         try {
-            Object email = redisService.get(buildTokenKey(token), String.class);
+            Object email = redisService.getRaw(buildTokenKey(token));
             return Optional.ofNullable(email).map(Object::toString);
         } catch (Exception e) {
             throw new DataAccessFailureException(e);
@@ -105,7 +105,7 @@ public class ResetPasswordService {
     public Optional<String> getTokenByEmail(String email) {
         logger.info("Retrieving reset password token for email={}", email);
         try {
-            Object token = redisService.get(buildEmailKey(email), String.class);
+            Object token = redisService.getRaw(buildEmailKey(email));
             return Optional.ofNullable(token).map(Object::toString);
         } catch (Exception e) {
             throw new DataAccessFailureException(e);

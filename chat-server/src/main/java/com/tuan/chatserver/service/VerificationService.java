@@ -1,11 +1,12 @@
 package com.tuan.chatserver.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tuan.chatserver.dto.PendingRegistration;
 import com.tuan.chatserver.exception.DataAccessFailureException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
@@ -39,10 +40,12 @@ public class VerificationService {
     private final DefaultRedisScript<Long> removeVerificationScript;
 
     private final RedisService redisService;
+    private final ObjectMapper objectMapper;
 
     @Autowired
-    public VerificationService(RedisService redisService) {
-        this.redisService=redisService;
+    public VerificationService(RedisService redisService, ObjectMapper objectMapper) {
+        this.redisService = redisService;
+        this.objectMapper = objectMapper;
         this.createVerificationScript = new DefaultRedisScript<>(CREATE_VERIFICATION_SCRIPT, Long.class);
         this.removeVerificationScript = new DefaultRedisScript<>(REMOVE_VERIFICATION_SCRIPT, Long.class);
     }
@@ -62,15 +65,18 @@ public class VerificationService {
         try {
             String tokenKey = buildTokenKey(token);
             String emailKey = buildEmailKey(pendingRegistration.getEmail());
+            String pendingRegistrationJson = objectMapper.writeValueAsString(pendingRegistration);
 
             redisService.execute(
                     createVerificationScript,
                     List.of(tokenKey, emailKey),
-                    pendingRegistration,
+                    pendingRegistrationJson,
                     String.valueOf(VERIFICATION_TTL.toMillis()),
                     token,
                     VERIFICATION_TOKEN_PREFIX
             );
+        } catch (JsonProcessingException e) {
+            throw new DataAccessFailureException(e);
         } catch (Exception e) {
             throw new DataAccessFailureException(e);
         }
@@ -79,8 +85,12 @@ public class VerificationService {
     public Optional<PendingRegistration> getPendingRegistration(String token) {
         logger.info("Retrieving pending registration for token={}", token);
         try {
-            Object value = redisService.get(buildTokenKey(token), PendingRegistration.class);
-            return Optional.ofNullable((PendingRegistration) value);
+            Optional<String> json = redisService.getRaw(buildTokenKey(token));
+            if (json.isEmpty()) {
+                return Optional.empty();
+            }
+            PendingRegistration result = objectMapper.readValue(json.get(), PendingRegistration.class);
+            return Optional.of(result);
         } catch (Exception e) {
             throw new DataAccessFailureException(e);
         }
@@ -105,8 +115,8 @@ public class VerificationService {
     public Optional<String> getTokenByEmail(String email) {
         logger.info("Retrieving verification token for email={}", email);
         try {
-            Object token = redisService.get(buildEmailKey(email), String.class);
-            return Optional.ofNullable(token).map(Object::toString);
+            Optional<String> token = redisService.getRaw(buildEmailKey(email));
+            return token;
         } catch (Exception e) {
             throw new DataAccessFailureException(e);
         }
